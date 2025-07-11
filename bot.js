@@ -118,7 +118,7 @@ function createBot() {
 
   bot.on('end', () => {
     console.log('❌ Disconnected – retrying in 10s\n\n');
-    setTimeout(createBot, 10000);
+    setTimeout(createBot, 5000);
   });
   bot.on('error', err => console.log('⚠️ Error:', err.message));
 }
