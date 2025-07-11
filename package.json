@@ -1,0 +1,23 @@
+{
+  "name": "elv",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "express": "^5.1.0",
+    "minecraft-data": "^3.93.0",
+    "minecraft-server-util": "^5.4.4",
+    "mineflayer": "^4.30.0",
+    "mineflayer-auto-eat": "^5.0.2",
+    "mineflayer-collectblock": "^1.6.0",
+    "mineflayer-pathfinder": "^2.4.5",
+    "socket.io": "^4.8.1"
+  }
+}
