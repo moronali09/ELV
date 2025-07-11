@@ -3,7 +3,7 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
 const logger       = require('./logger');
 
-const HOST = 'play.banglaverse.xyz';
+const HOST = 'play.minecraftuniversebd.pro';
 const PORT = 19132;
 const BOT_NAME = 'ELV';
 const VERSION  = '1.21.1';
