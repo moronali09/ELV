@@ -115,10 +115,20 @@ function createBot() {
     }
   }
 });
+  bot.on('message', (jsonMsg) => {
+  const msg = jsonMsg.toString();
+  if (msg.toLowerCase().includes('ban')) {
+    console.log(`[BAN MSG] ${msg}`);
+  } else if (msg.toLowerCase().includes('kick')) {
+    console.log(`[KICK MSG] ${msg}`);
+  } else if (msg.toLowerCase().includes('banlist')) {
+    console.log(`[BANLIST MSG] ${msg}`);
+  }
+});
 
   bot.on('end', () => {
     console.log('❌ Disconnected – retrying in 10s\n\n');
-    setTimeout(createBot, 5000);
+    setTimeout(createBot, 10000);
   });
   bot.on('error', err => console.log('⚠️ Error:', err.message));
 }
