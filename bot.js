@@ -3,8 +3,8 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
 const logger       = require('./logger');
 
-const HOST = 'play.minecraftuniversebd.pro';
-const PORT = 19132;
+const HOST = 'mc.playbmc.xyz';
+const PORT = 25603;
 const BOT_NAME = 'ELV';
 const VERSION  = '1.21.1';
 const OWNER    = 'moronali';
