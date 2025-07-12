@@ -1,4 +1,3 @@
-// bot.js
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
