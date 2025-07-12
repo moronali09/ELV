@@ -1,20 +1,7 @@
-const express      = require('express');
-const http         = require('http');
-const socketIo     = require('socket.io');
-
 const mineflayer   = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
 const logger       = require('./logger');
-
-const app    = express();
-const server = http.createServer(app);
-const io     = socketIo(server);
-
-app.use(express.static('public'));
-server.listen(3000, () => {
-  console.log('⚡ Dashboard: http://localhost:3000/web.html');
-});
 
 const HOST     = 'shadow_elites.ignorelist.com';
 const PORT     = 25604;
