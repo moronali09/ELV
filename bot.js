@@ -5,10 +5,10 @@ const fs = require('fs');
 
 const HOST       = 'shadow_elites.ignorelist.com';
 const PORT       = 25604;
-const BOT_NAME   = 'ELV';
+const BOT_NAME   = 'elv_bot_10100';
 const VERSION    = '1.21.1';
-const OWNER      = 'moronali09';
-const PASSWORD   = 'elvmoronby';
+const OWNER      = 'moronali';
+const PASSWORD   = 'potmarotanvir';
 const WELCOME_SET = new Set();
 
 function stripFormatting(text) {
