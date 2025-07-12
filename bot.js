@@ -1,115 +1,165 @@
-const mineflayer   = require('mineflayer');
+// bot.js
+const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
-const logger       = require('./logger');
+const fs = require('fs');
 
-const HOST     = 'Shadow_elites.ignorelist.com';
-const PORT     = 25604;
-const BOT_NAME = 'joni_bou_440_elv';
-const VERSION  = '1.21.4';
-const OWNER    = 'moronali';
-const PASSWORD = 'elvmoronby';
-
-
-
-let bot;
-let activePlayers = new Set();
-let welcomedPlayers = new Set();
+const HOST       = 'shadow_elites.ignorelist.com';
+const PORT       = 25604;
+const BOT_NAME   = 'ELV';
+const VERSION    = '1.21.1';
+const OWNER      = 'moronali09';
+const PASSWORD   = 'elvmoronby';
+const WELCOME_SET = new Set();
 
 function stripFormatting(text) {
   return text.replace(/§[0-9a-fk-or]/gi, '');
 }
 
+let bot = null;
+
 function createBot() {
-  console.log('⏸ Creating bot.');
-  bot = mineflayer.createBot({ host: HOST, port: PORT, username: BOT_NAME, version: VERSION });
+  console.log('▶️ Creating bot…');
+  bot = mineflayer.createBot({
+    host: HOST,
+    port: PORT,
+    username: BOT_NAME,
+    version: VERSION
+  });
+
   bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
-    console.log('✅ Bot spawned and connected!\n\n');
-    activePlayers.clear();
-    Object.keys(bot.players).forEach(name => activePlayers.add(stripFormatting(name)));
+    console.log('✅ Bot joined the server!');
 
     const mcData = mcDataLoader(bot.version);
-    bot.pathfinder.setMovements(new Movements(bot, mcData));
+    const defaultMove = new Movements(bot, mcData);
+    bot.pathfinder.setMovements(defaultMove);
 
-    bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    setTimeout(() => bot.chat(`/login ${PASSWORD}`), 1000);
+    setTimeout(() => bot.chat(`/register ${PASSWORD} ${PASSWORD}`), 5000);
+    setTimeout(() => bot.chat(`/login ${PASSWORD}`), 10000);
+
+    startWalking();
   });
 
   bot.on('message', msg => {
-    const text = stripFormatting(msg.toString());
-    console.log('[Chat]', text);
-    const low = text.toLowerCase();
-    if (low.includes('please register using')) {
-      bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-      console.log('↗️ Auto-register sent');
-    } else if (low.includes('please log in using')) {
-      bot.chat(`/login ${PASSWORD}`);
-      console.log('↗️ Auto-login sent');
-    }
+    console.log('[Chat]', stripFormatting(msg.toString()));
   });
 
   bot.on('playerJoined', player => {
     if (!player.username || player.username === BOT_NAME) return;
     const name = stripFormatting(player.username);
-    if (!activePlayers.has(name)) {
-      logger.logJoin(name);
-      if (!welcomedPlayers.has(name)) {
-        bot.chat(`👋 Welcome ${name}!`);
-        welcomedPlayers.add(name);
-      }
+    console.log(`🟢 Join: ${name}`);
+
+    if (!WELCOME_SET.has(name)) {
+      bot.chat(`👋 Welcome ${name}!`);
+      WELCOME_SET.add(name);
     }
-    activePlayers.add(name);
+
     const target = bot.players[player.username]?.entity;
-    if (target) bot.pathfinder.setGoal(new goals.GoalFollow(target, 1), true);
+    if (target) {
+      const { GoalFollow } = goals;
+      bot.pathfinder.setGoal(new GoalFollow(target, 1), true);
+      bot.chat(`👣 I'm following you, ${name}`);
+    }
   });
 
   bot.on('playerLeft', player => {
     if (!player.username || player.username === BOT_NAME) return;
     const name = stripFormatting(player.username);
-    if (activePlayers.has(name)) {
-      logger.logLeave(name);
-      bot.chat(`${name} left the server.`);
-      activePlayers.delete(name);
+    console.log(`🔴 Leave: ${name}`);
+    bot.chat(`${name} left the server.`);
+  });
+
+  // physicsTick: জল বা ফাঁকা ব্লক এড়িয়ে যাবে
+  bot.on('physicsTick', () => {
+    if (!bot.entity) return;
+    const pos   = bot.entity.position;
+    const below = bot.blockAt(pos.offset(0, -1, 0));
+    if (!below || below.name.includes('water') || below.boundingBox === 'empty') {
+      bot.setControlState('jump', true);
+      bot.setControlState('forward', false);
+    } else {
+      bot.setControlState('jump', false);
     }
   });
 
-  bot.on('chat', (username, message) => {
+  bot.on('entityHurt', entity => {
+    if (entity.type === 'player' && entity.username === BOT_NAME) {
+      console.log('⚠️ Under attack! Escaping…');
+      bot.clearControlStates();
+      bot.setControlState('back', true);
+      setTimeout(() => bot.clearControlStates(), 2000);
+    }
+  });
+
+  bot.on('chat', async (username, message) => {
     if (username !== OWNER) return;
+
     const msg = message.toLowerCase();
-    if (msg === 'ping') {
+
+    if (msg === 'jump') {
+      bot.setControlState('jump', true);
+      setTimeout(() => bot.setControlState('jump', false), 500);
+      bot.chat('Jumped!');
+    }
+    else if (msg === 'follow me') {
+      const target = bot.players[username]?.entity;
+      if (!target) return bot.chat("Can't see you!");
+      bot.chat('Following you...');
+      const { GoalFollow } = goals;
+      bot.pathfinder.setGoal(new GoalFollow(target, 1), true);
+    }
+    else if (msg === 'stop') {
+      bot.pathfinder.setGoal(null);
+      bot.clearControlStates();
+      bot.chat('Stopped.');
+    }
+    else if (msg === 'where are you') {
+      const p = bot.entity.position;
+      bot.chat(`I am at X:${p.x.toFixed(1)} Y:${p.y.toFixed(1)} Z:${p.z.toFixed(1)}`);
+    }
+    else if (msg === 'look at me') {
+      const target = bot.players[username]?.entity;
+      if (!target) return bot.chat("Can't find you.");
+      await bot.lookAt(target.position.offset(0, 1.6, 0));
+      bot.chat('👀 I am looking at you!');
+    }
+    else if (msg === 'ping') {
       const ping = bot._client?.ping ?? 'N/A';
       bot.chat(`🏓 Ping: ${ping}ms`);
     }
-    if (msg === 'players') {
-      const list = Array.from(activePlayers).filter(n => n !== BOT_NAME);
-      bot.chat(`👥 Players (${list.length}): ${list.join(', ') || 'None'}`);
+    else if (msg === 'players') {
+      const list = Object.keys(bot.players)
+        .map(n => stripFormatting(n))
+        .filter(n => n !== BOT_NAME);
+      bot.chat(`👥 Players online (${list.length}): ${list.join(', ') || 'None'}`);
     }
-    if (msg === 'stop') {
-      bot.pathfinder.setGoal(null);
-      bot.clearControlStates();
-      bot.chat('Stopped following.');
+    else if (msg === 'house banao') {
+      bot.chat('House building not implemented yet.');
     }
   });
-  bot.on('playerJoined', player => {
-  if (player.username === 'TANVIR110') {
-    const target = bot.players[player.username]?.entity;
-    if (target) {
-      const mcData = require('minecraft-data')(bot.version);
-      bot.pathfinder.setMovements(new Movements(bot, mcData));
-      const { GoalFollow } = goals;
-      bot.pathfinder.setGoal(new GoalFollow(target, 1), true);
-      bot.chat(`👣 Following ${player.username}`);
-    }
-  }
-});
 
   bot.on('end', () => {
-    console.log('❌ Disconnected – retrying in 10s\n\n');
+    console.log('❌ Bot disconnected – retrying in 10s');
     setTimeout(createBot, 10000);
   });
-  bot.on('error', err => console.log('⚠️ Error:', err.message));
+  bot.on('error', err => {
+    console.log('⚠️ Bot error:', err.message, '– retrying in 10s');
+    setTimeout(createBot, 10000);
+  });
+}
+
+function startWalking() {
+  const directions = ['forward', 'back', 'left', 'right'];
+  let current = null;
+  setInterval(() => {
+    if (!bot || !bot.entity) return;
+    if (current) bot.setControlState(current, false);
+    current = directions[Math.floor(Math.random() * directions.length)];
+    bot.setControlState(current, true);
+    setTimeout(() => bot.setControlState(current, false), 2000);
+  }, 5000);
 }
 
 createBot();
