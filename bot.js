@@ -6,7 +6,7 @@ const logger       = require('./logger');
 const HOST     = 'Shadow_elites.ignorelist.com';
 const PORT     = 25604;
 const BOT_NAME = 'ELV';
-const VERSION  = '1.21.1';
+const VERSION  = '1.21.4';
 const OWNER    = 'moronali';
 const PASSWORD = 'elvmoronby';
 
