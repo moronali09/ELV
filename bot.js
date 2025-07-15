@@ -1,11 +1,8 @@
-// bot.js
-// Smooth, clean and organized Mineflayer bot (Java Edition)
-// Setup: npm install mineflayer mineflayer-pathfinder mineflayer-pvp vec3
-
 const { createBot } = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const { RMCListener } = require('mineflayer-pvp'); // plugin auto-extends bot
+const pvp = require('mineflayer-pvp').plugin;
 const Vec3 = require('vec3');
+
 const config = {
   host: 'ip.ozima.cloud',
   port: 25607,
@@ -24,8 +21,7 @@ const missions = [
 ];
 
 function getRandomMission() {
-  const index = Math.floor(Math.random() * missions.length);
-  return missions[index];
+  return missions[Math.floor(Math.random() * missions.length)];
 }
 
 function parseMission(step) {
@@ -74,10 +70,7 @@ async function collectItems(bot, item, count) {
   console.log(`🪓 Collecting ${count} ${item}`);
   let gathered = 0;
   while (gathered < count) {
-    const block = bot.findBlock({
-      matching: b => b.name.includes(item),
-      maxDistance: 64,
-    });
+    const block = bot.findBlock({ matching: b => b.name.includes(item), maxDistance: 64 });
     if (!block) {
       await wander(bot);
       continue;
@@ -134,3 +127,4 @@ async function startBot() {
 }
 
 startBot();
+        
