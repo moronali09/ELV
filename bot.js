@@ -1,103 +1,136 @@
-const mineflayer = require('mineflayer');
+// bot.js
+// Smooth, clean and organized Mineflayer bot (Java Edition)
+// Setup: npm install mineflayer mineflayer-pathfinder mineflayer-pvp vec3
+
+const { createBot } = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const pvp = require('mineflayer-pvp').plugin;
+const { RMCListener } = require('mineflayer-pvp'); // plugin auto-extends bot
 const Vec3 = require('vec3');
-const fs = require('fs');
+const config = {
+  host: 'ip.ozima.cloud',
+  port: 25607,
+  username: 'ELV',
+  version: '1.21.1',
+  password: 'elvmoronby',
+};
 
-// Load server configs
-const configFile = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
-
-// Predefined missions pool
+// Predefined missions
 const missions = [
   'collect 10 oak logs',
-  'find and kill 5 zombies',
-  'go to coordinates 0 64 0',
+  'fight 5 zombies',
+  'go to 0 64 0',
   'mine 5 diamonds',
-  'build a shelter near your spawn'
+  'build a small shelter',
 ];
 
-function chooseMission() {
-  const idx = Math.floor(Math.random() * missions.length);
-  return missions[idx];
+function getRandomMission() {
+  const index = Math.floor(Math.random() * missions.length);
+  return missions[index];
 }
 
-function parseStep(step) {
-  if (/collect (\d+) (\w+)/i.test(step)) return { action: 'collect', count: +RegExp.$1, item: RegExp.$2 };
-  if (/fight (\d+) (\w+)/i.test(step)) return { action: 'fight', count: +RegExp.$1, mob: RegExp.$2 };
-  if (/go to coordinates ([-\d]+) (\d+) ([-\d]+)/i.test(step)) return { action: 'goto', x: +RegExp.$1, y: +RegExp.$2, z: +RegExp.$3 };
-  if (/mine (\d+) (\w+)/i.test(step)) return { action: 'collect', count: +RegExp.$1, item: RegExp.$2 };
-  return { action: 'chat', message: step };
-}
-
-async function executeStep(bot, step) {
-  const task = parseStep(step);
-
-  if (task.action === 'goto') {
-    const mcGoal = new goals.GoalBlock(task.x, task.y, task.z);
-    bot.pathfinder.setMovements(new Movements(bot));
-    await bot.pathfinder.goto(mcGoal);
-    bot.chat(`Reached ${task.x} ${task.y} ${task.z}`);
+function parseMission(step) {
+  const collectMatch = step.match(/collect (\d+) (\w+)/i);
+  if (collectMatch) {
+    return { type: 'collect', item: collectMatch[2], count: Number(collectMatch[1]) };
   }
 
-  if (task.action === 'collect') {
-    let collected = 0;
-    while (collected < task.count) {
-      const block = bot.findBlock({ matching: b => b.name.includes(task.item), maxDistance: 64 });
-      if (!block) {
-        bot.chat(`Searching for ${task.item}...`);
-        await bot.pathfinder.goto(new goals.GoalNear(bot.entity.position, 10));
-        continue;
-      }
-      await bot.pathfinder.goto(new goals.GoalBlock(block.position.x, block.position.y, block.position.z));
-      await bot.dig(block);
-      collected++;
-      bot.chat(`Collected ${collected}/${task.count} ${task.item}`);
+  const fightMatch = step.match(/fight (\d+) (\w+)/i);
+  if (fightMatch) {
+    return { type: 'fight', mob: fightMatch[2], count: Number(fightMatch[1]) };
+  }
+
+  const gotoMatch = step.match(/go to ([-\d]+) (\d+) ([-\d]+)/i);
+  if (gotoMatch) {
+    return { type: 'goto', position: Vec3(Number(gotoMatch[1]), Number(gotoMatch[2]), Number(gotoMatch[3])) };
+  }
+
+  return { type: 'chat', message: step };
+}
+
+async function performTask(bot, task) {
+  switch (task.type) {
+    case 'collect':
+      await collectItems(bot, task.item, task.count);
+      break;
+    case 'fight':
+      await fightMob(bot, task.mob, task.count);
+      break;
+    case 'goto':
+      await moveTo(bot, task.position);
+      break;
+    case 'chat':
+      bot.chat(task.message);
+      break;
+  }
+}
+
+async function moveTo(bot, position) {
+  bot.pathfinder.setMovements(new Movements(bot));
+  await bot.pathfinder.goto(new goals.GoalBlock(position.x, position.y, position.z));
+  console.log(`✅ Arrived at ${position.x},${position.y},${position.z}`);
+}
+
+async function collectItems(bot, item, count) {
+  console.log(`🪓 Collecting ${count} ${item}`);
+  let gathered = 0;
+  while (gathered < count) {
+    const block = bot.findBlock({
+      matching: b => b.name.includes(item),
+      maxDistance: 64,
+    });
+    if (!block) {
+      await wander(bot);
+      continue;
     }
-  }
-
-  if (task.action === 'fight') {
-    let defeated = 0;
-    while (defeated < task.count) {
-      const mob = bot.nearestEntity(e => e.name === task.mob);
-      if (!mob) {
-        bot.chat(`Looking for ${task.mob}...`);
-        await bot.pathfinder.goto(new goals.GoalNear(bot.entity.position, 10));
-        continue;
-      }
-      await bot.pvp.attack(mob);
-      defeated++;
-      bot.chat(`Defeated ${defeated}/${task.count} ${task.mob}`);
-    }
-  }
-
-  if (task.action === 'chat') {
-    bot.chat(task.message);
+    await moveTo(bot, block.position);
+    await bot.dig(block);
+    gathered++;
+    console.log(`🪓 Gathered ${gathered}/${count} ${item}`);
   }
 }
 
-function createBotInstance(cfg) {
-  const bot = mineflayer.createBot({
-    host: cfg.host,
-    port: cfg.port,
-    username: cfg.username,
-    version: cfg.version,
-  });
+async function fightMob(bot, mobName, count) {
+  console.log(`⚔️ Fighting ${count} ${mobName}`);
+  let defeated = 0;
+  while (defeated < count) {
+    const mob = bot.nearestEntity(e => e.name === mobName);
+    if (!mob) {
+      await wander(bot);
+      continue;
+    }
+    await bot.pvp.attack(mob);
+    defeated++;
+    console.log(`⚔️ Defeated ${defeated}/${count} ${mobName}`);
+  }
+}
 
+async function wander(bot) {
+  const { x, y, z } = bot.entity.position.offset(10, 0, 0);
+  return moveTo(bot, Vec3(x, y, z));
+}
+
+async function startBot() {
+  const bot = createBot(config);
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
-  bot.once('spawn', async () => {
-    if (cfg.register?.enabled) {
-      bot.chat(cfg.register.registerCommand);
-      setTimeout(() => bot.chat(cfg.register.loginCommand), 2000);
+  bot.on('login', () => console.log(`🔌 Logged in as ${config.username}`));
+  bot.on('spawn', async () => {
+    if (config.password) {
+      bot.chat(`/login ${config.password}`);
+      console.log('🔑 Logging in');
     }
-    const mission = chooseMission();
+    const mission = getRandomMission();
+    console.log(`🎯 Mission: ${mission}`);
     bot.chat(`Mission: ${mission}`);
-    await executeStep(bot, mission);
-    bot.chat('Mission complete!');
+    const task = parseMission(mission);
+    await performTask(bot, task);
+    console.log('🏁 Mission complete');
     bot.quit();
   });
 
-  bot.on('error', console.error);
-  bot.on('end', () => console.log('Bot disconnected'));
+  bot.on('error', err => console.log('❌ Error:', err.message));
+  bot.on('end', () => console.log('🔌 Disconnected'));
 }
+
+startBot();
