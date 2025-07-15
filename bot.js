@@ -1,111 +1,103 @@
-const fs = require('fs');
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const pvp = require('mineflayer-pvp').plugin;
 const Vec3 = require('vec3');
-const { Llama } = require('llama-cpp-node');
+const fs = require('fs');
 
-const llm = new Llama({
-  model: 'models/ggml-model-q4_0.bin',
-  n_ctx: 512,
-});
+// Load server configs
+const configFile = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
 
-async function askAI(prompt) {
-  const response = await llm.createCompletion({ prompt, max_tokens: 128, temperature: 0.7 });
-  return response.choices[0].text.trim();
+// Predefined missions pool
+const missions = [
+  'collect 10 oak logs',
+  'find and kill 5 zombies',
+  'go to coordinates 0 64 0',
+  'mine 5 diamonds',
+  'build a shelter near your spawn'
+];
+
+function chooseMission() {
+  const idx = Math.floor(Math.random() * missions.length);
+  return missions[idx];
 }
 
-function createGodBot(config) {
+function parseStep(step) {
+  if (/collect (\d+) (\w+)/i.test(step)) return { action: 'collect', count: +RegExp.$1, item: RegExp.$2 };
+  if (/fight (\d+) (\w+)/i.test(step)) return { action: 'fight', count: +RegExp.$1, mob: RegExp.$2 };
+  if (/go to coordinates ([-\d]+) (\d+) ([-\d]+)/i.test(step)) return { action: 'goto', x: +RegExp.$1, y: +RegExp.$2, z: +RegExp.$3 };
+  if (/mine (\d+) (\w+)/i.test(step)) return { action: 'collect', count: +RegExp.$1, item: RegExp.$2 };
+  return { action: 'chat', message: step };
+}
+
+async function executeStep(bot, step) {
+  const task = parseStep(step);
+
+  if (task.action === 'goto') {
+    const mcGoal = new goals.GoalBlock(task.x, task.y, task.z);
+    bot.pathfinder.setMovements(new Movements(bot));
+    await bot.pathfinder.goto(mcGoal);
+    bot.chat(`Reached ${task.x} ${task.y} ${task.z}`);
+  }
+
+  if (task.action === 'collect') {
+    let collected = 0;
+    while (collected < task.count) {
+      const block = bot.findBlock({ matching: b => b.name.includes(task.item), maxDistance: 64 });
+      if (!block) {
+        bot.chat(`Searching for ${task.item}...`);
+        await bot.pathfinder.goto(new goals.GoalNear(bot.entity.position, 10));
+        continue;
+      }
+      await bot.pathfinder.goto(new goals.GoalBlock(block.position.x, block.position.y, block.position.z));
+      await bot.dig(block);
+      collected++;
+      bot.chat(`Collected ${collected}/${task.count} ${task.item}`);
+    }
+  }
+
+  if (task.action === 'fight') {
+    let defeated = 0;
+    while (defeated < task.count) {
+      const mob = bot.nearestEntity(e => e.name === task.mob);
+      if (!mob) {
+        bot.chat(`Looking for ${task.mob}...`);
+        await bot.pathfinder.goto(new goals.GoalNear(bot.entity.position, 10));
+        continue;
+      }
+      await bot.pvp.attack(mob);
+      defeated++;
+      bot.chat(`Defeated ${defeated}/${task.count} ${task.mob}`);
+    }
+  }
+
+  if (task.action === 'chat') {
+    bot.chat(task.message);
+  }
+}
+
+function createBotInstance(cfg) {
   const bot = mineflayer.createBot({
-    host: config.host,
-    port: config.port,
-    username: config.username,
-    version: config.version,
+    host: cfg.host,
+    port: cfg.port,
+    username: cfg.username,
+    version: cfg.version,
   });
 
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
   bot.once('spawn', async () => {
-    if (config.register?.enabled) {
-      setTimeout(() => bot.chat(config.register.registerCommand), 2000);
-      setTimeout(() => bot.chat(config.register.loginCommand), 5000);
+    if (cfg.register?.enabled) {
+      bot.chat(cfg.register.registerCommand);
+      setTimeout(() => bot.chat(cfg.register.loginCommand), 2000);
     }
-    bot.chat('Local AI initialized.');
-    const mission = await askAI('You are a Minecraft AI. Give a challenging mission in one sentence.');
+    const mission = chooseMission();
     bot.chat(`Mission: ${mission}`);
-    planAndExecute(mission);
+    await executeStep(bot, mission);
+    bot.chat('Mission complete!');
+    bot.quit();
   });
 
-  async function planAndExecute(mission) {
-    const plan = await askAI(`Break down this mission into 5 sequential Minecraft tasks: ${mission}`);
-    const steps = plan.split(/\r?\n/).filter(s => s.trim());
-    for (const step of steps) {
-      bot.chat(`Executing: ${step}`);
-      await executeStep(step);
-    }
-    bot.chat('Mission accomplished!');
-  }
-
-  async function executeStep(step) {
-    if (/collect (\d+) (\w+)/i.test(step)) {
-      const [, count, item] = step.match(/collect (\d+) (\w+)/i);
-      return collectItems(item, +count);
-    }
-    if (/go to (.+)/i.test(step)) {
-      const target = step.match(/go to (.+)/i)[1];
-      return navigateTo(target);
-    }
-    if (/fight (\d+) (\w+)/i.test(step)) {
-      const [, num, mob] = step.match(/fight (\d+) (\w+)/i);
-      return fightMob(mob, +num);
-    }
-    return bot.chat(`Step unclear: ${step}`);
-  }
-
-  async function navigateTo(destination) {
-    const coordsText = await askAI(`Coordinates of ${destination} in format x y z:`);
-    const [x, y, z] = coordsText.split(/\s+/).map(Number);
-    const mcGoal = new goals.GoalBlock(x, y, z);
-    bot.pathfinder.setMovements(new Movements(bot));
-    return bot.pathfinder.goto(mcGoal);
-  }
-
-  async function collectItems(itemName, qty) {
-    let collected = 0;
-    while (collected < qty) {
-      const block = bot.findBlock({ matching: b => b.name.includes(itemName), maxDistance: 64 });
-      if (!block) {
-        await bot.chat(`Searching for ${itemName}...`);
-        await bot.pathfinder.goto(new goals.GoalNear(bot.entity.position.x + 10, bot.entity.position.y, bot.entity.position.z + 10, 1));
-        continue;
-      }
-      await bot.pathfinder.goto(new goals.GoalBlock(block.position.x, block.position.y, block.position.z));
-      await bot.dig(block);
-      collected++;
-      bot.chat(`Collected ${collected}/${qty} ${itemName}`);
-    }
-  }
-
-  async function fightMob(mobName, count) {
-    let defeated = 0;
-    while (defeated < count) {
-      const mob = bot.nearestEntity(e => e.name === mobName);
-      if (!mob) {
-        await bot.chat(`Looking for ${mobName}...`);
-        await bot.pathfinder.goto(new goals.GoalNear(bot.entity.position.x + 5, bot.entity.position.y, bot.entity.position.z + 5, 2));
-        continue;
-      }
-      await bot.pvp.attack(mob);
-      defeated++;
-      bot.chat(`Defeated ${defeated}/${count} ${mobName}`);
-    }
-  }
-
-  bot.on('error', err => console.error(err));
-  bot.on('end', () => console.log('Disconnected'));
+  bot.on('error', console.error);
+  bot.on('end', () => console.log('Bot disconnected'));
 }
-
-// Load from config.json
-const configFile = JSON.parse(fs.readFileSync('config.json', 'utf-8'));
-configFile.servers.forEach(cfg => createGodBot(cfg));
