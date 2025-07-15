@@ -20,6 +20,29 @@ function start(){
     if(config.password)bot.chat(`/login ${config.password}`)
     bot.chat('I am 24/7 bot to keep server online. Ask me anything.')
     bot.on('chat',(u,m)=>{
+      console.log(`[CHAT] <${u}> ${m}`)
+      if(m==='help'){ bot.chat('Commands: follow me, stop, help'); return }
+      if(m==='follow me'){following=true;bot.chat('Following'); return} 
+      if(m==='stop'){following=false;bot.chat('Stopped'); return}
+    })
+    setInterval(()=>{
+      if(!following) moveTo(bot, randomPos(bot.entity.position))
+    },30000)
+    bot.on('physicsTick',()=>{
+      const mob=bot.nearestEntity(e=>e.type==='mob')
+      if(mob && bot.entity.position.distanceTo(mob.position)<10){
+        const away=bot.entity.position.minus(mob.position)
+        moveTo(bot, bot.entity.position.plus(away.normalize().scaled(10)))
+      } else if(following){
+        const p=bot.players[bot.username]?.entity
+        if(p)moveTo(bot,p.position.offset(0,0,0))
+      }
+    })
+  })()=>{
+    if(config.password)bot.chat(`/login ${config.password}`)
+    bot.chat('I am 24/7 bot to keep server online. Ask me anything.')
+    bot.on('chat',(u,m)=>{
+      console.log(`[CHAT] <${u}> ${m}`)
       if(m==='follow me'){following=true;bot.chat('Following')} 
       if(m==='stop'){following=false;bot.chat('Stopped')}
     })
