@@ -15,6 +15,11 @@ function startBot() {
     bot.loadPlugin(pathfinder)
     bot.chat('Hey! I am a 24/7 bot, here to help keep the server always online.')
   })
+    setInterval(() => {
+      const players = Object.keys(bot.players).filter(name => name !== bot.username)
+      console.log(`👥 Online Players (${players.length}): ${players.join(', ') || 'No one'}`)
+  }, 60000)
+})
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return
