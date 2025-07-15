@@ -19,24 +19,35 @@ function randomPos(origin, range = 10) {
 }
 
 async function moveTo(bot, position) {
-  try {
-    bot.pathfinder.setMovements(new Movements(bot))
-    return new Promise(resolve => {
-      bot.pathfinder.goto(
-        new goals.GoalBlock(position.x, position.y, position.z),
-        err => {
-          if (err) {
-            console.log('⚠️ moveTo error:', err.message)
-            resolve(false)
-          } else {
-            resolve(true)
-          }
+  return new Promise(resolve => {
+    try {
+      const goal = new goals.GoalBlock(position.x, position.y, position.z)
+      bot.pathfinder.setMovements(new Movements(bot))
+      bot.pathfinder.setGoal(goal, false)
+      const timeout = setTimeout(() => {
+        bot.pathfinder.setGoal(null)
+        console.log('⚠️ moveTo timeout after 15s')
+        resolve(false)
+      }, 15000)
+
+      bot.once('goal_reached', () => {
+        clearTimeout(timeout)
+        resolve(true)
+      })
+
+      bot.once('path_update', r => {
+        if (r.status === 'noPath') {
+          clearTimeout(timeout)
+          console.log('⚠️ noPath found')
+          resolve(false)
         }
-      )
-    })
-  } catch (e) {
-    console.log('⚠️ moveTo failed:', e.message)
-  }
+      })
+
+    } catch (err) {
+      console.log('⚠️ moveTo error:', err.message)
+      resolve(false)
+    }
+  })
 }
 
 function start() {
@@ -44,11 +55,10 @@ function start() {
   bot.loadPlugin(pathfinder)
 
   let following = false
+  let followTarget = null
 
   bot.on('spawn', () => {
-    if (config.password) {
-      bot.chat(`/login ${config.password}`)
-    }
+    if (config.password) bot.chat(`/login ${config.password}`)
     bot.chat('I am 24/7 bot to keep server online. Type help for commands.')
 
     bot.on('chat', (username, message) => {
@@ -56,10 +66,18 @@ function start() {
       if (message === 'help') {
         bot.chat('Commands: follow me, stop, help')
       } else if (message === 'follow me') {
-        following = true
-        bot.chat('Following you')
+        const player = bot.players[username]?.entity
+        if (player) {
+          following = true
+          followTarget = player
+          bot.chat('Following you')
+        } else {
+          bot.chat('I can't see you right now.')
+        }
       } else if (message === 'stop') {
         following = false
+        followTarget = null
+        bot.pathfinder.setGoal(null)
         bot.chat('Stopped following')
       }
     })
@@ -80,11 +98,8 @@ function start() {
           bot.entity.position.z - mob.position.z
         )
         moveTo(bot, away)
-      } else if (following) {
-        const playerEntity = bot.players[config.username]?.entity
-        if (playerEntity) {
-          moveTo(bot, playerEntity.position)
-        }
+      } else if (following && followTarget) {
+        moveTo(bot, followTarget.position)
       }
     })
   })
