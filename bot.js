@@ -4,8 +4,8 @@ const pvp = require('mineflayer-pvp').plugin;
 const Vec3 = require('vec3');
 
 const config = {
-  host: 'ip.ozima.cloud',
-  port: 25607,
+  host: 'tensionlage.aternos.me',
+  port: 63085,
   username: 'ELV',
   version: '1.21.1',
   password: 'elvmoronby',
