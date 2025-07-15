@@ -8,9 +8,7 @@ const config = {host:'tensionlage.aternos.me',port:63085,username:'ELV',version:
 const missions = [
   { type:'goto',position:Vec3(10,65,-5) },
   { type:'collect',item:'oak_log',count:5 },
-  { type:'fight',mob:'zombie',count:3 },
-  { type:'farm',crop:'wheat',count:10 },
-  { type:'deposit' }
+  { type:'fight',mob:'zombie',count:3 }
 ]
 
 function getMission() {return missions[Math.floor(Math.random()*missions.length)]}
@@ -30,7 +28,7 @@ async function collect(bot,item,count){
   while(got<count){
     const b=bot.findBlock({matching:b=>b.name.includes(item),maxDistance:64})
     if(!b){await moveTo(bot,bot.entity.position.offset(5,0,5));continue}
-    if(!await moveTo(bot,b.position))continue
+    if(!await moveTo(bot,b.position))break
     await bot.dig(b)
     got++
   }
@@ -46,35 +44,11 @@ async function fight(bot,mob,count){
   }
 }
 
-async function farm(bot,crop,count){
-  let harvested=0
-  while(harvested<count){
-    const b=bot.findBlock({matching:b=>b.name===crop+'_stem'||b.name===crop+'_crop',maxDistance:64})
-    if(!b){await moveTo(bot,bot.entity.position.offset(5,0,5));continue}
-    if(!await moveTo(bot,b.position))continue
-    await bot.dig(b)
-    harvested++
-  }
-}
-
-async function deposit(bot){
-  const b=bot.findBlock({matching:b=>b.name.endsWith('_chest'),maxDistance:64})
-  if(!b)return
-  if(!await moveTo(bot,b.position))return
-  const chest=await bot.openContainer(b)
-  for(const item of bot.inventory.items()){
-    await chest.deposit(item.type,item.metadata,item.count)
-  }
-  chest.close()
-}
-
 async function execute(bot,mission){
   try{
     if(mission.type==='goto')await moveTo(bot,mission.position)
     else if(mission.type==='collect')await collect(bot,mission.item,mission.count)
     else if(mission.type==='fight')await fight(bot,mission.mob,mission.count)
-    else if(mission.type==='farm')await farm(bot,mission.crop,mission.count)
-    else if(mission.type==='deposit')await deposit(bot)
   }catch(e){}
 }
 
@@ -84,6 +58,7 @@ function start(){
   bot.on('login',()=>console.log('Logged in'))
   bot.on('spawn',async()=>{
     if(config.password)bot.chat(`/login ${config.password}`)
+    bot.chat('I am a 24/7 bot, server 24/7 online রাখতে help করতে আসি. Ask me anything.')
     bot.on('chat',(u,m)=>console.log(`[CHAT]<${u}> ${m}`))
     bot.on('death',()=>console.log('Died, respawning'))
     while(true){
