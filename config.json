@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "host": "mc.example.com",
+      "port": 25565,
+      "username": "GodAI_Bot",
+      "password": "GodX_Bot_9#Rise",
+      "version": "1.21.1",
+      "register": {
+        "enabled": true,
+        "registerCommand": "/register GodX_Bot_9#Rise GodX_Bot_9#Rise",
+        "loginCommand": "/login GodX_Bot_9#Rise"
+      }
+    }
+  ]
+}
