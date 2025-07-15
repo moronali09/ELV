@@ -4,12 +4,12 @@
       "host": "ip.ozima.cloud",
       "port": 25607,
       "username": "ELV",
-      "password": "GodX_Bot_9#Rise",
+      "password": "elvmoronby",
       "version": "1.21.1",
       "register": {
         "enabled": true,
-        "registerCommand": "/register GodX_Bot_9#Rise GodX_Bot_9#Rise",
-        "loginCommand": "/login GodX_Bot_9#Rise"
+        "registerCommand": "/register elvmoronby elvmoronby",
+        "loginCommand": "/login elvmoronby"
       }
     }
   ]
