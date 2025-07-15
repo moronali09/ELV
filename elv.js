@@ -10,24 +10,33 @@ const config = {
   password: 'elvmoronby'
 }
 
-function randomPos(origin, range = 20) {
-  return Vec3(
-    origin.x + (Math.random() - 0.5) * range,
-    origin.y,
-    origin.z + (Math.random() - 0.5) * range
+function randomPos(origin, range = 10) {
+  return origin.offset(
+    Math.floor(Math.random() * range - range / 2),
+    0,
+    Math.floor(Math.random() * range - range / 2)
   )
 }
 
 async function moveTo(bot, position) {
-  bot.pathfinder.setMovements(new Movements(bot))
-  return new Promise(resolve => {
-    bot.pathfinder.goto(
-      new goals.GoalBlock(position.x, position.y, position.z),
-      err => {
-        resolve(!err)
-      }
-    )
-  })
+  try {
+    bot.pathfinder.setMovements(new Movements(bot))
+    return new Promise(resolve => {
+      bot.pathfinder.goto(
+        new goals.GoalBlock(position.x, position.y, position.z),
+        err => {
+          if (err) {
+            console.log('⚠️ moveTo error:', err.message)
+            resolve(false)
+          } else {
+            resolve(true)
+          }
+        }
+      )
+    })
+  } catch (e) {
+    console.log('⚠️ moveTo failed:', e.message)
+  }
 }
 
 function start() {
@@ -80,9 +89,9 @@ function start() {
     })
   })
 
-  bot.on('error', err => console.log('Error', err.message))
+  bot.on('error', err => console.log('❌ Error:', err.message))
   bot.on('end', () => {
-    console.log('Disconnected, reconnecting...')
+    console.log('🔌 Disconnected, reconnecting...')
     setTimeout(start, 5000)
   })
 }
