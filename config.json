@@ -1,9 +1,9 @@
 {
   "servers": [
     {
-      "host": "mc.example.com",
-      "port": 25565,
-      "username": "GodAI_Bot",
+      "host": "ip.ozima.cloud",
+      "port": 25607,
+      "username": "ELV",
       "password": "GodX_Bot_9#Rise",
       "version": "1.21.1",
       "register": {
