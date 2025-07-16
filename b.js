@@ -10,7 +10,6 @@ const OWNER    = 'moronali';
 
 let retrying = false;
 let currentFollower = null;
-const seenPlayers = new Set();
 
 function createBot() {
   if (retrying) return;
@@ -25,15 +24,11 @@ function createBot() {
     const mcData = mcDataLoader(bot.version);
     bot.pathfinder.setMovements(new Movements(bot, mcData));
     startWalking(bot);
-  });
 
-  bot.on('playerJoined', p => {
-    if (p.username === BOT_NAME) return;
-    if (seenPlayers.has(p.username)) {
-      bot.chat(`wlc back ${p.username}`);
-    } else {
-      seenPlayers.add(p.username);
-    }
+    // সার্ভার-চ্যাট লগ
+    bot.on('message', jsonMsg => {
+      console.log(jsonMsg.toString());
+    });
   });
 
   bot.on('physicsTick', () => {
