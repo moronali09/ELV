@@ -1,4 +1,3 @@
-// bot.js
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
@@ -9,11 +8,9 @@ const BOT_NAME = 'elv';
 const VERSION  = '1.21.1';
 const OWNER    = 'moronali';
 
-let bot = null;
-
 function createBot() {
   console.log('▶️ Creating bot…');
-  bot = mineflayer.createBot({
+  const bot = mineflayer.createBot({
     host: HOST,
     port: PORT,
     username: BOT_NAME,
@@ -34,7 +31,7 @@ function createBot() {
     bot.pathfinder.setMovements(defaultMove);
 
     // র‍্যান্ডম হেঁটে বেড়ানোর শুরু
-    startWalking();
+    startWalking(bot);
   });
 
   bot.on('playerJoined', player => {
@@ -122,29 +119,26 @@ function createBot() {
   // ডিসকানেক্ট হলে রিকনেক্ট
   bot.on('end', () => {
     console.log('❌ Bot disconnected – retrying in 10s');
-    bot = null;
     setTimeout(createBot, 10000);
   });
 
   bot.on('error', err => {
     console.log('⚠️ Bot error:', err.message, '– retrying in 10s');
-    bot = null;
     setTimeout(createBot, 10000);
   });
 }
 
 // র‍্যান্ডম হাঁটা লজিক
-function startWalking() {
+function startWalking(bot) {
   const directions = ['forward', 'back', 'left', 'right'];
   let current = null;
   setInterval(() => {
-    if (!bot || !bot.entity) return;
+    if (!bot.entity) return;
     if (current) bot.setControlState(current, false);
     current = directions[Math.floor(Math.random() * directions.length)];
     bot.setControlState(current, true);
     setTimeout(() => bot.setControlState(current, false), 2000);
   }, 4000);
 }
-
 
 createBot();
