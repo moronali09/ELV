@@ -10,38 +10,30 @@ const OWNER    = 'moronali';
 
 let retrying = false;
 let currentFollower = null;
+const seenPlayers = new Set();
 
 function createBot() {
   if (retrying) return;
   retrying = true;
-  console.log('🤖 Connecting…');
+  console.log('🤖 Connecting...');
   const bot = mineflayer.createBot({ host: HOST, port: PORT, username: BOT_NAME, version: VERSION, keepAlive: true, connectTimeout: 60000 });
-
   bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
     retrying = false;
-    console.log('\n✅ Connected');
-
+    console.log('✅ Connected');
     const mcData = mcDataLoader(bot.version);
     bot.pathfinder.setMovements(new Movements(bot, mcData));
     startWalking(bot);
+  });
 
-    bot.on('playerJoined', p => {
-      if (p.username === BOT_NAME) return;
-      console.log(`\n\n✨ ${p.username} joined`);
-    });
-    bot.on('playerLeft', p => {
-      if (p.username === BOT_NAME) return;
-      console.log(`\n\n🕳️ ${p.username} left`);
-    });
-
-    bot.on('message', jsonMsg => {
-      const text = jsonMsg.toString();
-      if (/ joined$/.test(text) || / left$/.test(text)) {
-        console.log(`\n\n🎉 ${text}`);
-      }
-    });
+  bot.on('playerJoined', p => {
+    if (p.username === BOT_NAME) return;
+    if (seenPlayers.has(p.username)) {
+      bot.chat(`wlc back ${p.username}`);
+    } else {
+      seenPlayers.add(p.username);
+    }
   });
 
   bot.on('physicsTick', () => {
@@ -56,7 +48,7 @@ function createBot() {
 
   bot.on('entityHurt', e => {
     if (e.type === 'player' && e.username === BOT_NAME) {
-      console.log('\n⚠️ Under attack');
+      console.log('⚠️ Under attack');
       bot.clearControlStates();
       bot.setControlState('back', true);
       setTimeout(() => bot.clearControlStates(), 2000);
@@ -64,6 +56,7 @@ function createBot() {
   });
 
   bot.on('chat', async (username, message) => {
+    console.log(`${username}: ${message}`);
     const msg = message.toLowerCase();
 
     if (msg === 'follow me') {
@@ -105,16 +98,16 @@ function createBot() {
     }
   });
 
-  bot.on('kicked', reason => console.log(`\n❌ Kicked: ${reason}`));
+  bot.on('kicked', reason => console.log(`❌ Kicked: ${reason}`));
   bot.on('end', () => {
-    console.log('\n🔄 Reconnecting in 10s');
+    console.log('🔄 Reconnecting in 10s');
     setTimeout(() => { retrying = false; createBot(); }, 10000);
   });
-  bot.on('error', err => console.log(`\n⚠️ Error: ${err.message}`));
+  bot.on('error', err => console.log(`⚠️ Error: ${err.message}`));
 }
 
 function startWalking(bot) {
-  const dirs = ['forward','back','left','right']; let curr = null;
+  const dirs = ['forward', 'back', 'left', 'right']; let curr = null;
   setInterval(() => {
     if (!bot.entity) return;
     if (curr) bot.setControlState(curr, false);
