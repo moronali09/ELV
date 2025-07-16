@@ -33,10 +33,26 @@ function createBot() {
     const mcData = mcDataLoader(bot.version);
     bot.pathfinder.setMovements(new Movements(bot, mcData));
     startWalking(bot);
-  });
 
-  bot.on('playerJoined', p => p.username !== BOT_NAME && console.log(`🟢 ${p.username} joined`));
-  bot.on('playerLeft',   p => p.username !== BOT_NAME && console.log(`🔴 ${p.username} left`));
+    // Join/Leave NPC ও প্লেয়ার লগ
+    bot.on('playerJoined', p => {
+      if (p.username === BOT_NAME) return;
+      console.log(`✨ ${p.username} joined`);
+    });
+    bot.on('playerLeft', p => {
+      if (p.username === BOT_NAME) return;
+      console.log(`🕳️ ${p.username} left`);
+    });
+
+    // সার্ভার-চ্যাট লগ (joined/left মেসেজসহ)
+    bot.on('message', jsonMsg => {
+      const text = jsonMsg.toString();
+      if (/ joined$/.test(text) || / left$/.test(text)) {
+        console.log(`
+🎉 ${text}`);
+      }
+    });
+  });
 
   bot.on('physicsTick', () => {
     if (!bot.entity) return;
@@ -125,3 +141,4 @@ function startWalking(bot) {
 }
 
 createBot();
+         
