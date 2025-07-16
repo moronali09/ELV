@@ -15,41 +15,31 @@ function createBot() {
   if (retrying) return;
   retrying = true;
   console.log('🤖 Connecting…');
-  const bot = mineflayer.createBot({
-    host: HOST,
-    port: PORT,
-    username: BOT_NAME,
-    version: VERSION,
-    keepAlive: true,
-    connectTimeout: 60000
-  });
+  const bot = mineflayer.createBot({ host: HOST, port: PORT, username: BOT_NAME, version: VERSION, keepAlive: true, connectTimeout: 60000 });
 
   bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
     retrying = false;
-    console.log('✅ Connected');
+    console.log('\n✅ Connected');
 
     const mcData = mcDataLoader(bot.version);
     bot.pathfinder.setMovements(new Movements(bot, mcData));
     startWalking(bot);
 
-    // Join/Leave NPC ও প্লেয়ার লগ
     bot.on('playerJoined', p => {
       if (p.username === BOT_NAME) return;
-      console.log(`✨ ${p.username} joined`);
+      console.log(`\n\n✨ ${p.username} joined`);
     });
     bot.on('playerLeft', p => {
       if (p.username === BOT_NAME) return;
-      console.log(`🕳️ ${p.username} left`);
+      console.log(`\n\n🕳️ ${p.username} left`);
     });
 
-    // সার্ভার-চ্যাট লগ (joined/left মেসেজসহ)
     bot.on('message', jsonMsg => {
       const text = jsonMsg.toString();
       if (/ joined$/.test(text) || / left$/.test(text)) {
-        console.log(`
-🎉 ${text}`);
+        console.log(`\n\n🎉 ${text}`);
       }
     });
   });
@@ -66,7 +56,7 @@ function createBot() {
 
   bot.on('entityHurt', e => {
     if (e.type === 'player' && e.username === BOT_NAME) {
-      console.log('⚠️ Under attack');
+      console.log('\n⚠️ Under attack');
       bot.clearControlStates();
       bot.setControlState('back', true);
       setTimeout(() => bot.clearControlStates(), 2000);
@@ -79,16 +69,11 @@ function createBot() {
     if (msg === 'follow me') {
       const target = bot.players[username]?.entity;
       if (!target) return bot.chat("Can't see you.");
-
       if (username === OWNER) {
-        currentFollower = OWNER;
-        bot.chat('➡️ Following owner');
+        currentFollower = OWNER; bot.chat('➡️ Following owner');
       } else {
-        if (currentFollower === OWNER) {
-          return bot.chat('🔒 Owner has priority');
-        }
-        currentFollower = username;
-        bot.chat(`➡️ Following ${username}`);
+        if (currentFollower === OWNER) return bot.chat('🔒 Owner has priority');
+        currentFollower = username; bot.chat(`➡️ Following ${username}`);
       }
       const { GoalFollow } = goals;
       return bot.pathfinder.setGoal(new GoalFollow(target, 1), true);
@@ -120,17 +105,16 @@ function createBot() {
     }
   });
 
-  bot.on('kicked', reason => console.log(`❌ Kicked: ${reason}`));
+  bot.on('kicked', reason => console.log(`\n❌ Kicked: ${reason}`));
   bot.on('end', () => {
-    console.log('🔄 Reconnecting in 10s');
+    console.log('\n🔄 Reconnecting in 10s');
     setTimeout(() => { retrying = false; createBot(); }, 10000);
   });
-  bot.on('error', err => console.log(`⚠️ Error: ${err.message}`));
+  bot.on('error', err => console.log(`\n⚠️ Error: ${err.message}`));
 }
 
 function startWalking(bot) {
-  const dirs = ['forward', 'back', 'left', 'right'];
-  let curr = null;
+  const dirs = ['forward','back','left','right']; let curr = null;
   setInterval(() => {
     if (!bot.entity) return;
     if (curr) bot.setControlState(curr, false);
@@ -141,4 +125,3 @@ function startWalking(bot) {
 }
 
 createBot();
-         
