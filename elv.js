@@ -134,10 +134,14 @@ function startSleepRoutine() {
 }
 
 function monitorPlayers() {
+  const playersNow = Object.keys(bot.players).filter(n => n !== BOT_NAME)
+  log('Players online:', playersNow.length, playersNow.join(', ') || 'None')
+
   setInterval(() => {
     const players = Object.keys(bot.players).filter(n => n !== BOT_NAME)
     log('Players online:', players.length, players.join(', ') || 'None')
-  }, 60000)
+  }, 600000)
+}, 10000)
 }
 
 createBot()
