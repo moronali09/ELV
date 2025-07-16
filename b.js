@@ -9,38 +9,35 @@ const VERSION  = '1.21.1';
 const OWNER    = 'moronali';
 
 let retrying = false;
+let currentFollower = null;
 
 function createBot() {
   if (retrying) return;
   retrying = true;
-  console.log('▶️ Creating bot…');
+  console.log('🤖 Connecting…');
   const bot = mineflayer.createBot({
     host: HOST,
     port: PORT,
     username: BOT_NAME,
     version: VERSION,
     keepAlive: true,
-    connectTimeout: 60 * 1000
+    connectTimeout: 60000
   });
 
-  // Pathfinder প্লাগইন লোড
   bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
     retrying = false;
-    console.log('✅ Bot joined the server!');
+    console.log('✅ Connected');
 
     const mcData = mcDataLoader(bot.version);
-    const defaultMove = new Movements(bot, mcData);
-    bot.pathfinder.setMovements(defaultMove);
+    bot.pathfinder.setMovements(new Movements(bot, mcData));
     startWalking(bot);
   });
 
-  // খেলোয়াড় যোগ/বিয়ে
-  bot.on('playerJoined', p => p.username !== BOT_NAME && console.log(`🟢 Join: ${p.username}`));
-  bot.on('playerLeft',   p => p.username !== BOT_NAME && console.log(`🔴 Leave: ${p.username}`));
+  bot.on('playerJoined', p => p.username !== BOT_NAME && console.log(`🟢 ${p.username} joined`));
+  bot.on('playerLeft',   p => p.username !== BOT_NAME && console.log(`🔴 ${p.username} left`));
 
-  // physicsTick ও EntityHandled
   bot.on('physicsTick', () => {
     if (!bot.entity) return;
     const pos = bot.entity.position;
@@ -50,63 +47,69 @@ function createBot() {
       bot.setControlState('forward', false);
     } else bot.setControlState('jump', false);
   });
+
   bot.on('entityHurt', e => {
     if (e.type === 'player' && e.username === BOT_NAME) {
-      console.log('⚠️ Under attack! Escaping…');
+      console.log('⚠️ Under attack');
       bot.clearControlStates();
       bot.setControlState('back', true);
       setTimeout(() => bot.clearControlStates(), 2000);
     }
   });
 
-  // chat কমান্ড
-  bot.on('chat', async (u, msg) => {
-    if (u !== OWNER) return;
-    const lower = msg.toLowerCase();
-    switch (lower) {
-      case 'jump':
-        bot.setControlState('jump', true);
-        setTimeout(() => bot.setControlState('jump', false), 500);
-        return bot.chat('Jumped!');
-      case 'follow me': {
-        const target = bot.players[u]?.entity;
-        if (!target) return bot.chat("Can't see you!");
-        bot.chat('Following you...');
-        const { GoalFollow } = goals;
-        return bot.pathfinder.setGoal(new GoalFollow(target, 1), true);
+  bot.on('chat', async (username, message) => {
+    const msg = message.toLowerCase();
+
+    if (msg === 'follow me') {
+      const target = bot.players[username]?.entity;
+      if (!target) return bot.chat("Can't see you.");
+
+      if (username === OWNER) {
+        currentFollower = OWNER;
+        bot.chat('➡️ Following owner');
+      } else {
+        if (currentFollower === OWNER) {
+          return bot.chat('🔒 Owner has priority');
+        }
+        currentFollower = username;
+        bot.chat(`➡️ Following ${username}`);
       }
-      case 'stop':
-        bot.pathfinder.setGoal(null);
-        bot.clearControlStates();
-        return bot.chat('Stopped.');
-      case 'where are you': {
-        const { x, y, z } = bot.entity.position;
-        return bot.chat(`I am at X:${x.toFixed(1)} Y:${y.toFixed(1)} Z:${z.toFixed(1)}`);
-      }
-      case 'look at me': {
-        const target = bot.players[u]?.entity;
-        if (!target) return bot.chat("Can't find you.");
-        await bot.lookAt(target.position.offset(0, 1.6, 0));
-        return bot.chat('👀 I am looking at you!');
-      }
-      case 'house banao':
-        return bot.chat('House building not implemented yet.');
-      default:
-        return;
+      const { GoalFollow } = goals;
+      return bot.pathfinder.setGoal(new GoalFollow(target, 1), true);
+    }
+
+    if (msg === 'stop') {
+      bot.pathfinder.setGoal(null);
+      bot.clearControlStates();
+      currentFollower = null;
+      return bot.chat('🛑 Stopped');
+    }
+
+    if (msg === 'jump') {
+      bot.setControlState('jump', true);
+      setTimeout(() => bot.setControlState('jump', false), 500);
+      return bot.chat('🤾 Jumped');
+    }
+
+    if (msg === 'where are you') {
+      const { x, y, z } = bot.entity.position;
+      return bot.chat(`📍 X:${x.toFixed(1)} Y:${y.toFixed(1)} Z:${z.toFixed(1)}`);
+    }
+
+    if (msg === 'look at me') {
+      const target = bot.players[username]?.entity;
+      if (!target) return bot.chat("Can't find you.");
+      await bot.lookAt(target.position.offset(0, 1.6, 0));
+      return bot.chat('👀 Looking');
     }
   });
 
-  // বন্ধ / এরর হ্যান্ডলিং
-  bot.on('kicked', reason => {
-    console.log(`❌ Kicked: ${reason}`);
-  });
+  bot.on('kicked', reason => console.log(`❌ Kicked: ${reason}`));
   bot.on('end', () => {
-    console.log('❌ Connection closed – retrying in 10s');
+    console.log('🔄 Reconnecting in 10s');
     setTimeout(() => { retrying = false; createBot(); }, 10000);
   });
-  bot.on('error', err => {
-    console.log('⚠️ Bot error:', err.message);
-  });
+  bot.on('error', err => console.log(`⚠️ Error: ${err.message}`));
 }
 
 function startWalking(bot) {
