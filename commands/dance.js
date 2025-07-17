@@ -1,5 +1,5 @@
 module.exports = {
-  name: '',
+  name: 'dance',
   execute(bot) {
     bot.chat('💃 Let's dance!');
     let step = 0;
