@@ -1,7 +1,7 @@
 module.exports = {
   name: 'dance',
   execute(bot) {
-    bot.chat('💃 Let's dance!');
+    bot.chat('💃 Lets dance!');
     let step = 0;
     const actions = ['forward', 'back', 'left', 'right'];
     const interval = setInterval(() => {
