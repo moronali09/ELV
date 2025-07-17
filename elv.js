@@ -32,6 +32,7 @@ function createBot() {
 
 function setupListeners() {
   const commands = loadCommands(bot);
+    bot.commands = commands;
 
   bot.on('chat', (username, message) => {
     handleCommand(bot, commands, username, message.toLowerCase());
