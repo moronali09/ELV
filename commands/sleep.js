@@ -3,7 +3,7 @@ module.exports = {
   execute(bot) {
     const time = bot.time.timeOfDay;
     if (time < 13000 || time > 23000) {
-      bot.chat('🛏️ It's not night yet.');
+      bot.chat('🛏️ Its not night yet.');
       return;
     }
     if (!bot.homePosition) {
