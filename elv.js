@@ -3,6 +3,7 @@ const pathfinder = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
 const { loadCommands, handleCommand } = require('./utils/commandHandler');
 const config = require('./config.json');
+const wander = require('./utils/wander');
 
 let bot;
 
