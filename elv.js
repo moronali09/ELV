@@ -19,9 +19,16 @@ function createBot() {
   });
 
   bot.loadPlugin(pathfinder.pathfinder);
-
   bot.once('spawn', () => {
-    console.log('✅ Connected');
+  console.log('✅ Connected');
+  const mcData = mcDataLoader(bot.version);
+  bot.pathfinder.setMovements(new pathfinder.Movements(bot, mcData));
+  setupListeners();
+
+  const wander = require('./utils/wander');
+  wander(bot);
+});
+  
 
     let loggedIn = false;
     const password = config.password || 'elvmoronby';
