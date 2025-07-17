@@ -1,7 +1,7 @@
-const { goals } = require('mineflayer-pathfinder');
+homeconst { goals } = require('mineflayer-pathfinder');
 
 module.exports = {
-  name: '',
+  name: 'comehome',
   execute(bot) {
     if (!bot.homePosition) {
       return bot.chat('Home not set yet. Use /sethome first.');
