@@ -1,4 +1,4 @@
-homeconst { goals } = require('mineflayer-pathfinder');
+const { goals } = require('mineflayer-pathfinder');
 
 module.exports = {
   name: 'comehome',
