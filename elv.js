@@ -23,7 +23,7 @@ function createBot() {
     console.log('✅ Connected');
 
     let loggedIn = false;
-    const password = config.password || 'elv123';
+    const password = config.password || 'elvmoronby';
 
     const tryLogin = () => {
       if (loggedIn) return;
