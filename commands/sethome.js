@@ -1,18 +1,17 @@
 const fs = require('fs');
 const path = require('path');
+const { goals } = require('mineflayer-pathfinder');
 
 module.exports = {
-  name: 'sethome',
+  name: 'comehome',
   execute(bot) {
-    const home = bot.entity.position;
-    const data = {
-      x: home.x,
-      y: home.y,
-      z: home.z
-    };
     const filePath = path.join(__dirname, '..', 'save', 'home.json');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-    bot.chat(`🏡 Home saved at (${home.x.toFixed(1)}, ${home.y.toFixed(1)}, ${home.z.toFixed(1)})`);
+    if (!fs.existsSync(filePath)) {
+      return bot.chat('❌ Home not set. Use /sethome first.');
+    }
+    const { x, y, z } = JSON.parse(fs.readFileSync(filePath));
+    bot.chat('🏠 Coming home...');
+    bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
   }
 };
+
