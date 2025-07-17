@@ -1,8 +1,18 @@
+const fs = require('fs');
+const path = require('path');
+
 module.exports = {
   name: 'sethome',
   execute(bot) {
-    bot.homePosition = bot.entity.position.clone();
-    const { x, y, z } = bot.homePosition;
-    bot.chat(`Home set at X:${x.toFixed(1)}, Y:${y.toFixed(1)}, Z:${z.toFixed(1)}`);
+    const home = bot.entity.position;
+    const data = {
+      x: home.x,
+      y: home.y,
+      z: home.z
+    };
+    const filePath = path.join(__dirname, '..', 'save', 'home.json');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    bot.chat(`🏡 Home saved at (${home.x.toFixed(1)}, ${home.y.toFixed(1)}, ${home.z.toFixed(1)})`);
   }
 };
