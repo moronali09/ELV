@@ -21,6 +21,18 @@ function createBot() {
 
   bot.once('spawn', () => {
     console.log('✅ Connected');
+
+    let loggedIn = false;
+    const password = config.password || 'elv123';
+
+    const tryLogin = () => {
+      if (loggedIn) return;
+      bot.chat(`/register ${password} ${password}`);
+      setTimeout(() => bot.chat(`/login ${password}`), 3000);
+    };
+
+    tryLogin();
+
     const mcData = mcDataLoader(bot.version);
     bot.pathfinder.setMovements(new pathfinder.Movements(bot, mcData));
     setupListeners();
@@ -32,10 +44,20 @@ function createBot() {
 
 function setupListeners() {
   const commands = loadCommands(bot);
-    bot.commands = commands;
+  bot.commands = commands;
+
+  bot.on('message', (jsonMsg) => {
+    const msg = jsonMsg.toString();
+    if (
+      msg.toLowerCase().includes('successfully') ||
+      msg.toLowerCase().includes('logged in')
+    ) {
+      console.log('🔐 Login successful!');
+    }
+  });
 
   bot.on('chat', (username, message) => {
-    handleCommand(bot, commands, username, message.toLowerCase());
+    handleCommand(bot, bot.commands, username, message.toLowerCase());
   });
 }
 
