@@ -2,8 +2,8 @@ const mineflayer = require('mineflayer');
 const pathfinder = require('mineflayer-pathfinder');
 const mcDataLoader = require('minecraft-data');
 const { loadCommands, handleCommand } = require('./utils/commandHandler');
-const config = require('./config.json');
 const wander = require('./utils/wander');
+const config = require('./config.json');
 
 let bot;
 
@@ -18,20 +18,32 @@ function createBot() {
     connectTimeout: 60000
   });
 
+  // apply plugin
   bot.loadPlugin(pathfinder.pathfinder);
+
   bot.once('spawn', () => {
-  console.log('✅ Connected');
-  const mcData = mcDataLoader(bot.version);
-  bot.pathfinder.setMovements(new pathfinder.Movements(bot, mcData));
-  setupListeners();
+    console.log('✅ Connected');
 
-  const wander = require('./utils/wander');
-  wander(bot);
-});
-  
+    // movement setup
+    const mcData = mcDataLoader(bot.version);
+    bot.pathfinder.setMovements(new pathfinder.Movements(bot, mcData));
 
+    // load commands and wander behavior
+    bot.commands = loadCommands(bot);
+    setupListeners();
+    wander(bot);
+
+    // login logic
     let loggedIn = false;
     const password = config.password || 'elvmoronby';
+
+    bot.on('message', (jsonMsg) => {
+      const msg = jsonMsg.toString().toLowerCase();
+      if (msg.includes('successfully') || msg.includes('logged in')) {
+        console.log('🔐 Login successful!');
+        loggedIn = true;
+      }
+    });
 
     const tryLogin = () => {
       if (loggedIn) return;
@@ -40,33 +52,18 @@ function createBot() {
     };
 
     tryLogin();
-
-    const mcData = mcDataLoader(bot.version);
-    bot.pathfinder.setMovements(new pathfinder.Movements(bot, mcData));
-    setupListeners();
   });
 
+  // reconnect on end/error
   bot.on('end', () => setTimeout(createBot, 10000));
   bot.on('error', err => console.log(`⚠️ Error: ${err.message}`));
 }
 
 function setupListeners() {
-  const commands = loadCommands(bot);
-  bot.commands = commands;
-
-  bot.on('message', (jsonMsg) => {
-    const msg = jsonMsg.toString();
-    if (
-      msg.toLowerCase().includes('successfully') ||
-      msg.toLowerCase().includes('logged in')
-    ) {
-      console.log('🔐 Login successful!');
-    }
-  });
-
   bot.on('chat', (username, message) => {
     handleCommand(bot, bot.commands, username, message.toLowerCase());
   });
 }
 
+// start bot
 createBot();
