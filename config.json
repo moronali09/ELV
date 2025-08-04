@@ -1,8 +1,9 @@
 {
   "host": "FriendlySMP-mg0G.aternos.me",
   "port": 37678,
-  "botName": "ELV",
-  "version": "1.21.1",
-  "owner": "moronali",
-  "password": "elvmoronby"
+  "username": "ELV",
+  "chatInterval": 10000,
+  "antiAfkInterval": 5000,
+  "spamThreshold": 5,
+  "spamInterval": 10000
 }
