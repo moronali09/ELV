@@ -2,109 +2,50 @@ const fs = require('fs');
 const mineflayer = require('mineflayer');
 const minecraftData = require('minecraft-data');
 const { pathfinder, Movements } = require('mineflayer-pathfinder');
-const mcServerUtil = require('minecraft-server-util');
-const { loadCommands, handleCommand } = require('./utils/commandHandler');
-const wander = require('./utils/wander');
-
-// config.json:
-// {
-//   "host": "",
-//   "port": 25565,
-//   "botName": "Player123",
-//   "password": "",
-//   "version": false,
-//   "edition": "java" // optional: "java" or "bedrock"
-// }
-
-const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
-
-/**
- * Detects server edition unless overridden in config
- */
-async function detectEdition() {
-  if (config.edition === 'java' || config.edition === 'bedrock') {
-    return config.edition;
-  }
-
-  try {
-    await mcServerUtil.status(config.host, { port: config.port, timeout: 7000 });
-    return 'java';
-  } catch {
-    try {
-      const result = await mcServerUtil.statusBedrock(config.host, config.port, { timeout: 7000 });
-      // store protocol version for Bedrock
-      config.version = result.protocolVersion;
-      return 'bedrock';
-    } catch (err) {
-      console.error('🔍 Server detection failed:', err.message);
-      console.log('👉 Using default edition from config or falling back to Java');
-      return config.edition || 'java';
-    }
-  }
-}
+const prettyMeta = require('pretty-meta');       // optional but helps auto print debug info
+const config = require('./config.json');
 
 async function startBot() {
-  const edition = await detectEdition();
-  console.log('Detected edition:', edition);
+  console.log('🔎 Server →', config.host, ':', config.port);
 
   const botOptions = {
     host: config.host,
     port: config.port,
     username: config.botName,
+    version: config.version || false,
+    auth: config.auth || 'offline',
     keepAlive: true,
     connectTimeout: 60000
   };
 
-  if (edition === 'bedrock') {
-    botOptions.version = config.version;
-    botOptions.offline = true;
-  } else {
-    botOptions.version = config.version || false;
-    botOptions.auth = 'offline';
-  }
+  console.log('➡️ Connecting with version:', botOptions.version, 'auth:', botOptions.auth);
 
   const bot = mineflayer.createBot(botOptions);
   bot.loadPlugin(pathfinder);
 
+  bot.on('kicked', reason => {
+    console.log('👢 Kicked! reason =', reason.toString());
+  });
+
+  bot.on('error', err => {
+    console.error('❗ Bot error:', err.message);
+  });
+
   bot.once('spawn', () => {
-    console.log('✅ Connected');
+    console.log('✅ Spawned as', bot.username, 'on version', bot.version);
     const mcData = minecraftData(bot.version);
     bot.pathfinder.setMovements(new Movements(bot, mcData));
-    bot.commands = loadCommands(bot);
-    wander(bot);
-
-    let loggedIn = false;
-    const pw = config.password;
-    const loginEvent = edition === 'java' ? 'message' : 'text';
-
-    bot.on(loginEvent, msg => {
-      const txt = msg.toString().toLowerCase();
-      if (/successfully|logged in/.test(txt)) {
-        console.log('🔐 Login successful');
-        loggedIn = true;
-      }
-    });
-
-    if (pw) {
-      (function tryLogin() {
-        if (loggedIn) return;
-        bot.chat(`/register ${pw} ${pw}`);
-        setTimeout(() => bot.chat(`/login ${pw}`), 3000);
-      })();
-    }
+    prettyMeta(bot);  // auto-print ping/latency/etc
   });
 
   bot.on('chat', (username, message) => {
-    if (username === bot.username) return;
-    handleCommand(bot, bot.commands, username, message.toLowerCase());
+    if (username !== bot.username) bot.chat(`You said: ${message}`);
   });
 
   bot.on('end', () => {
-    console.log('🔄 Reconnecting...');
-    setTimeout(startBot, 10000);
+    console.log('🔄 Disconnected; reconnecting in 8s...');
+    setTimeout(startBot, 8000);
   });
-
-  bot.on('error', err => console.log(`⚠️ Error: ${err.message}`));
 }
 
-startBot().catch(err => console.error('❌ Fatal error:', err));
+startBot().catch(err => console.error('🚫 Fatal error:', err));
