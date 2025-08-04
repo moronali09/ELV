@@ -1,69 +1,92 @@
+const fs = require('fs');
 const mineflayer = require('mineflayer');
-const pathfinder = require('mineflayer-pathfinder');
-const mcDataLoader = require('minecraft-data');
+const minecraftData = require('minecraft-data');
+const { pathfinder, Movements } = require('mineflayer-pathfinder');
+const mcServerUtil = require('minecraft-server-util');
 const { loadCommands, handleCommand } = require('./utils/commandHandler');
 const wander = require('./utils/wander');
-const config = require('./config.json');
+const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
 
-let bot;
+/**
+ * Detect Java or Bedrock
+ */
+async function detectEdition() {
+  try {
+    await mcServerUtil.status(config.host, { port: config.port, timeout: 5000 });
+    return 'java';
+  } catch {
+    try {
+      const result = await mcServerUtil.statusBedrock(config.host, config.port, { timeout: 5000 });
+      return { edition: 'bedrock', version: result.protocolVersion };
+    } catch {
+      throw new Error('Cannot reach server');
+    }
+  }
+}
 
-function createBot() {
-  console.log('🤖 Connecting...');
-  bot = mineflayer.createBot({
+async function startBot() {
+  const detect = await detectEdition();
+  console.log('Detected edition:', detect.edition || detect);
+
+  const botOptions = {
     host: config.host,
     port: config.port,
     username: config.botName,
-    version: config.version,
     keepAlive: true,
     connectTimeout: 60000
-  });
+  };
 
-  // apply plugin
-  bot.loadPlugin(pathfinder.pathfinder);
+  if (detect !== 'java') {
+    // Bedrock
+    botOptions.version = detect.version;
+    botOptions.offline = true;
+  } else {
+    // Java
+    botOptions.version = config.version || false;
+    botOptions.auth = 'offline';
+  }
+
+  const bot = mineflayer.createBot(botOptions);
+  bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
     console.log('✅ Connected');
-
     // movement setup
-    const mcData = mcDataLoader(bot.version);
-    bot.pathfinder.setMovements(new pathfinder.Movements(bot, mcData));
+    const mcData = minecraftData(bot.version);
+    bot.pathfinder.setMovements(new Movements(bot, mcData));
 
-    // load commands and wander behavior
+    // load commands & wander
     bot.commands = loadCommands(bot);
-    setupListeners();
     wander(bot);
 
-    // login logic
+    // login/register
     let loggedIn = false;
-    const password = config.password || 'elvmoronby';
-
-    bot.on('message', (jsonMsg) => {
-      const msg = jsonMsg.toString().toLowerCase();
-      if (msg.includes('successfully') || msg.includes('logged in')) {
-        console.log('🔐 Login successful!');
+    const pw = config.password || null;
+    bot.on(detect === 'java' ? 'message' : 'text', (msg) => {
+      const txt = msg.toString().toLowerCase();
+      if (/successfully|logged in/.test(txt)) {
+        console.log('🔐 Login successful');
         loggedIn = true;
       }
     });
 
-    const tryLogin = () => {
-      if (loggedIn) return;
-      bot.chat(`/register ${password} ${password}`);
-      setTimeout(() => bot.chat(`/login ${password}`), 3000);
-    };
-
-    tryLogin();
+    (function tryLogin() {
+      if (!pw || loggedIn) return;
+      bot.chat(`/register ${pw} ${pw}`);
+      setTimeout(() => bot.chat(`/login ${pw}`), 3000);
+    })();
   });
 
-  // reconnect on end/error
-  bot.on('end', () => setTimeout(createBot, 10000));
+  bot.on('chat', (username, message) => {
+    if (username === bot.username) return;
+    handleCommand(bot, bot.commands, username, message.toLowerCase());
+  });
+
+  bot.on('end', () => {
+    console.log('🔄 Reconnecting...');
+    setTimeout(startBot, 10000);
+  });
   bot.on('error', err => console.log(`⚠️ Error: ${err.message}`));
 }
 
-function setupListeners() {
-  bot.on('chat', (username, message) => {
-    handleCommand(bot, bot.commands, username, message.toLowerCase());
-  });
-}
-
-// start bot
-createBot();
+startBot().catch(console.error);
