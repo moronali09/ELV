@@ -1,18 +1,15 @@
-# Use official Node.js LTS image
-FROM node:18-alpine
+# Use Node base image
+FROM node:20-alpine
 
-# Create app directory
-WORKDIR /usr/src/app
+# Set work directory
+WORKDIR /app
 
-# Install app dependencies
-COPY package.json package-lock.json* ./
-RUN npm install --production
+# Copy package.json and install dependencies
+COPY package.json ./
+RUN npm install
 
-# Bundle app source
+# Copy the rest of the code
 COPY . .
 
-# Expose no ports (bot connects outbound)
-# If you need a healthcheck endpoint, you can add one here
-
-# Default command to run your bot
+# Run the bot
 CMD ["node", "bot.js"]
