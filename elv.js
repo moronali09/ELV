@@ -1,51 +1,73 @@
-const fs = require('fs');
 const mineflayer = require('mineflayer');
-const minecraftData = require('minecraft-data');
-const { pathfinder, Movements } = require('mineflayer-pathfinder');
-const prettyMeta = require('pretty-meta');       // optional but helps auto print debug info
-const config = require('./config.json');
+const { pathfinder, Movements, goals: { GoalBlock } } = require('mineflayer-pathfinder');
+const fs = require('fs');
 
-async function startBot() {
-  console.log('🔎 Server →', config.host, ':', config.port);
+// Load config
+const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
+let reconnectTimeout = null;
 
-  const botOptions = {
+function createBot() {
+  console.log('Connecting to', config.host, config.port);
+  const bot = mineflayer.createBot({
     host: config.host,
     port: config.port,
-    username: config.botName,
-    version: config.version || false,
-    auth: config.auth || 'offline',
-    keepAlive: true,
-    connectTimeout: 60000
-  };
+    username: config.username,
+    version: config.version || false
+  });
 
-  console.log('➡️ Connecting with version:', botOptions.version, 'auth:', botOptions.auth);
-
-  const bot = mineflayer.createBot(botOptions);
+  // load pathfinder
   bot.loadPlugin(pathfinder);
 
-  bot.on('kicked', reason => {
-    console.log('👢 Kicked! reason =', reason.toString());
-  });
-
-  bot.on('error', err => {
-    console.error('❗ Bot error:', err.message);
-  });
-
   bot.once('spawn', () => {
-    console.log('✅ Spawned as', bot.username, 'on version', bot.version);
-    const mcData = minecraftData(bot.version);
-    bot.pathfinder.setMovements(new Movements(bot, mcData));
-    prettyMeta(bot);  // auto-print ping/latency/etc
+    console.log('Bot spawned at', bot.entity.position);
+    const mcData = require('minecraft-data')(bot.version);
+    const defaultMove = new Movements(bot, mcData);
+    bot.pathfinder.setMovements(defaultMove);
   });
 
-  bot.on('chat', (username, message) => {
-    if (username !== bot.username) bot.chat(`You said: ${message}`);
-  });
-
+  // reconnect logic
   bot.on('end', () => {
-    console.log('🔄 Disconnected; reconnecting in 8s...');
-    setTimeout(startBot, 8000);
+    console.log('Disconnected. Reconnecting in 10s...');
+    reconnectTimeout = setTimeout(createBot, 10000);
   });
+  bot.on('error', err => console.error('Error:', err));
+
+  // chat commands
+  bot.on('chat', (username, message) => {
+    if (username === bot.username) return;
+    const [cmd, ...args] = message.split(' ');
+    if (cmd === '!come') {
+      const target = bot.players[args[0]];
+      if (target) {
+        const pos = target.entity.position;
+        bot.pathfinder.setGoal(new GoalBlock(pos.x, pos.y, pos.z));
+        bot.chat(`Coming to ${args[0]}`);
+      }
+    }
+    if (cmd === '!stop') {
+      bot.pathfinder.setGoal(null);
+      bot.chat('Stopped');
+    }
+    if (cmd === '!ping') {
+      bot.chat(`Ping: ${bot.player.ping}ms`);
+    }
+  });
+
+  // auto equip sword
+  bot.on('health', () => {
+    const sword = bot.inventory.items().find(item => item.name.includes('sword'));
+    if (sword) bot.equip(sword, 'hand').catch(() => {});
+  });
+
+  // anti-AFK
+  setInterval(() => {
+    bot.lookAt(bot.entity.position.offset(1, 0, 0));
+    bot.setControlState('jump', true);
+    setTimeout(() => bot.setControlState('jump', false), 100);
+  }, 60000);
+
+  return bot;
 }
 
-startBot().catch(err => console.error('🚫 Fatal error:', err));
+// start
+createBot();
