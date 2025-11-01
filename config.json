@@ -1,17 +1,29 @@
-// config.json
+
 {
   "host": "sparrowcraft.aternos.me",
   "port": 25519,
-  "usernameList": ["Cleaner_bot"],
+  "username": "Cleaner_bot",
   "auth": "offline",
-  "move": {
+  "silent": true,
+  "authPlugin": {
     "enabled": true,
-    "radius": 6,
-    "intervalMs": 3000
+    "autoRegister": true,
+    "registerPassword": "ChangeThisPass123",
+    "autoLogin": true,
+    "loginPassword": "ChangeThisPass123",
+    "commandStyle": "authme", 
+    "delayAfterSpawnMs": 2500
+  },
+  "wander": {
+    "enabled": true,
+    "cycleIntervalMs": 600000,
+    "activeDurationMs": 30000,
+    "stepIntervalMs": 3000,
+    "radius": 8
   },
   "reconnect": {
     "enabled": true,
-    "delayMs": 5000,
-    "maxAttempts": 10
+    "delayMs": 8000,
+    "maxAttempts": 20
   }
 }
