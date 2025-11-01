@@ -2,15 +2,15 @@
 {
   "host": "sparrowcraft.aternos.me",
   "port": 25519,
-  "username": "Cleaner_bot",
+  "username": "ELV",
   "auth": "offline",
   "silent": true,
   "authPlugin": {
     "enabled": true,
     "autoRegister": true,
-    "registerPassword": "Cleaner",
+    "registerPassword": "mohan4200",
     "autoLogin": true,
-    "loginPassword": "Cleaner",
+    "loginPassword": "mohan4200",
     "commandStyle": "authme",
     "delayAfterSpawnMs": 6000,
     "authResponseTimeoutMs": 10000
