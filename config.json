@@ -1,0 +1,17 @@
+// config.json
+{
+  "host": "sparrowcraft.aternos.me",
+  "port": 25519,
+  "usernameList": ["Cleaner_bot"],
+  "auth": "offline",
+  "move": {
+    "enabled": true,
+    "radius": 6,
+    "intervalMs": 3000
+  },
+  "reconnect": {
+    "enabled": true,
+    "delayMs": 5000,
+    "maxAttempts": 10
+  }
+}
