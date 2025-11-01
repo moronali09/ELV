@@ -1,8 +1,8 @@
 
 {
-  "name": "silent-premium-bot",
+  "name": "cleaner-bot-premium",
   "version": "1.0.0",
-  "description": "Silent Mineflayer bot that joins and wanders (offline mode by default). Use only on servers you own/have permission to test.",
+  "description": "Silent Mineflayer bot with optional register/login and occasional random movement cycles.",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
