@@ -11,8 +11,9 @@
     "registerPassword": "ChangeThisPass123",
     "autoLogin": true,
     "loginPassword": "ChangeThisPass123",
-    "commandStyle": "authme", 
-    "delayAfterSpawnMs": 2500
+    "commandStyle": "authme",
+    "delayAfterSpawnMs": 2500,
+    "postAuthDelayMs": 1500
   },
   "wander": {
     "enabled": true,
@@ -25,5 +26,7 @@
     "enabled": true,
     "delayMs": 8000,
     "maxAttempts": 20
-  }
+  },
+  "dataDir": "./data",
+  "registeredFile": "registered.json"
 }
