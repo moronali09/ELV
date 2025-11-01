@@ -8,19 +8,21 @@
   "authPlugin": {
     "enabled": true,
     "autoRegister": true,
-    "registerPassword": "ChangeThisPass123",
+    "registerPassword": "Cleaner",
     "autoLogin": true,
-    "loginPassword": "ChangeThisPass123",
+    "loginPassword": "Cleaner",
     "commandStyle": "authme",
-    "delayAfterSpawnMs": 2500,
-    "postAuthDelayMs": 1500
+    "delayAfterSpawnMs": 6000,
+    "authResponseTimeoutMs": 10000
   },
   "wander": {
     "enabled": true,
     "cycleIntervalMs": 600000,
     "activeDurationMs": 30000,
     "stepIntervalMs": 3000,
-    "radius": 8
+    "radius": 8,
+    "jumpChancePerStep": 0.25,
+    "jumpHoldMs": 450
   },
   "reconnect": {
     "enabled": true,
