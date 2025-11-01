@@ -1,15 +1,16 @@
 // bot.js
-// Silent Mineflayer bot: optional register/login and occasional randomized movement cycles.
+// Silent Mineflayer bot that registers once (persists to data/registered.json), then logs in on future joins and runs periodic wandering.
 // Use only on servers you own or have explicit permission to test.
 
 const fs = require('fs');
+const path = require('path');
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals: { GoalNear } } = require('mineflayer-pathfinder');
 const mcDataLib = require('minecraft-data');
 
 const cfg = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
 
-// Silence console output if requested
+// silent if requested
 if (cfg.silent) {
   console.log = () => {};
   console.info = () => {};
@@ -20,11 +21,25 @@ if (cfg.silent) {
 process.on('uncaughtException', () => {});
 process.on('unhandledRejection', () => {});
 
+const dataDir = cfg.dataDir || './data';
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const regPath = path.join(dataDir, cfg.registeredFile || 'registered.json');
+
+// load registered map
+let registered = {};
+try {
+  if (fs.existsSync(regPath)) registered = JSON.parse(fs.readFileSync(regPath, 'utf8')) || {};
+} catch (e) { registered = {}; }
+
 let botInstance = null;
 let reconnectAttempts = 0;
 let cycleTimer = null;
 let activeMoveTimer = null;
 let stepTimer = null;
+
+function saveRegistered() {
+  try { fs.writeFileSync(regPath, JSON.stringify(registered, null, 2)); } catch (e) {}
+}
 
 function createOptions() {
   return {
@@ -35,24 +50,49 @@ function createOptions() {
   };
 }
 
-function sendAuthCommands(bot) {
-  if (!cfg.authPlugin || !cfg.authPlugin.enabled) return;
-  const delay = cfg.authPlugin.delayAfterSpawnMs || 2000;
-  setTimeout(() => {
-    try {
-      if (cfg.authPlugin.autoRegister && cfg.authPlugin.registerPassword) {
-        if (cfg.authPlugin.commandStyle === 'authme') {
-          bot.chat(`/register ${cfg.authPlugin.registerPassword} ${cfg.authPlugin.registerPassword}`);
-        } else {
-          bot.chat(`/register ${cfg.authPlugin.registerPassword}`);
+function sendRegisterThenLogin(bot, username) {
+  if (!cfg.authPlugin || !cfg.authPlugin.enabled) return Promise.resolve('no-auth');
+  return new Promise((resolve) => {
+    const pass = cfg.authPlugin.registerPassword || cfg.authPlugin.loginPassword || '';
+    const cmdStyle = (cfg.authPlugin.commandStyle || 'authme').toLowerCase();
+    const delayAfter = cfg.authPlugin.delayAfterSpawnMs || 2000;
+    const postAuthDelay = cfg.authPlugin.postAuthDelayMs || 1200;
+
+    setTimeout(() => {
+      try {
+        if (!registered[username] && cfg.authPlugin.autoRegister) {
+          if (cmdStyle === 'authme') {
+            bot.chat(`/register ${pass} ${pass}`);
+          } else {
+            bot.chat(`/register ${pass}`);
+          }
+          // mark as registered locally (we assume register succeeded on servers you control)
+          registered[username] = true;
+          saveRegistered();
+          // optional immediate login after register if requested
+          if (cfg.authPlugin.autoLogin) {
+            setTimeout(() => {
+              try { bot.chat(`/login ${cfg.authPlugin.loginPassword || pass}`); } catch (e) {}
+            }, postAuthDelay);
+          }
+          return resolve('registered');
         }
-      }
-      if (cfg.authPlugin.autoLogin && cfg.authPlugin.loginPassword) {
-        // some servers need login after register or instead of register
-        bot.chat(`/login ${cfg.authPlugin.loginPassword}`);
-      }
-    } catch (e) {}
-  }, delay);
+
+        if (registered[username] && cfg.authPlugin.autoLogin) {
+          try { bot.chat(`/login ${cfg.authPlugin.loginPassword || pass}`); } catch (e) {}
+          return resolve('logged-in');
+        }
+
+        // fallback: if not registered but autoRegister disabled, try login (some servers accept)
+        if (!registered[username] && cfg.authPlugin.autoLogin) {
+          try { bot.chat(`/login ${cfg.authPlugin.loginPassword || pass}`); } catch (e) {}
+          return resolve('login-attempted');
+        }
+
+        return resolve('no-action');
+      } catch (e) { return resolve('error'); }
+    }, delayAfter);
+  });
 }
 
 function startStepMovement(bot) {
@@ -76,10 +116,7 @@ function startStepMovement(bot) {
 
 function stopStepMovement(bot) {
   try {
-    if (stepTimer) {
-      clearInterval(stepTimer);
-      stepTimer = null;
-    }
+    if (stepTimer) { clearInterval(stepTimer); stepTimer = null; }
     if (bot && bot.pathfinder) {
       try { bot.pathfinder.setGoal(null); } catch (e) {}
     }
@@ -88,13 +125,12 @@ function stopStepMovement(bot) {
 
 function startWanderCycle(bot) {
   if (!cfg.wander || !cfg.wander.enabled) return;
-  const cycleInterval = cfg.wander.cycleIntervalMs || 600000; // default 10 minutes
-  const activeDuration = cfg.wander.activeDurationMs || 30000; // default 30s
+  stopWanderCycle(); // ensure no duplicates
+  const cycleInterval = cfg.wander.cycleIntervalMs || 600000;
+  const activeDuration = cfg.wander.activeDurationMs || 30000;
 
-  // immediate possible first activation (optional: delay first cycle by cycleInterval)
   cycleTimer = setInterval(() => {
     try {
-      // start active movement period
       startStepMovement(bot);
       if (activeMoveTimer) clearTimeout(activeMoveTimer);
       activeMoveTimer = setTimeout(() => {
@@ -103,7 +139,7 @@ function startWanderCycle(bot) {
     } catch (e) {}
   }, cycleInterval);
 
-  // kick off first cycle immediately (so bot doesn't wait cycleInterval before first movement)
+  // start first brief movement immediately
   try {
     startStepMovement(bot);
     if (activeMoveTimer) clearTimeout(activeMoveTimer);
@@ -113,17 +149,27 @@ function startWanderCycle(bot) {
   } catch (e) {}
 }
 
-function stopWanderCycle(bot) {
+function stopWanderCycle() {
   try {
     if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null; }
     if (activeMoveTimer) { clearTimeout(activeMoveTimer); activeMoveTimer = null; }
-    stopStepMovement(bot);
+    stopStepMovement(botInstance);
   } catch (e) {}
 }
 
 function cleanup(bot) {
-  stopWanderCycle(bot);
+  stopWanderCycle();
   try { if (bot && bot._client) bot._client.end(); } catch (e) {}
+}
+
+function tryReconnect() {
+  if (!cfg.reconnect || !cfg.reconnect.enabled) return;
+  if (typeof cfg.reconnect.maxAttempts === 'number' && reconnectAttempts >= cfg.reconnect.maxAttempts) return;
+  reconnectAttempts++;
+  const delay = cfg.reconnect.delayMs || 8000;
+  setTimeout(() => {
+    if (!botInstance) createBot();
+  }, delay);
 }
 
 function createBot() {
@@ -133,19 +179,23 @@ function createBot() {
     const bot = mineflayer.createBot(options);
     botInstance = bot;
     reconnectAttempts = 0;
-
     bot.loadPlugin(pathfinder);
 
-    bot.once('spawn', () => {
+    let mcData = null;
+    bot.once('spawn', async () => {
       try {
-        const mcData = mcDataLib(bot.version);
+        mcData = mcDataLib(bot.version);
         const movements = new Movements(bot, mcData);
         bot.pathfinder.setMovements(movements);
-        sendAuthCommands(bot);
-        // start wander cycles after a small delay to allow auth to complete
+
+        // auth flow: register once then login on future joins
+        await sendRegisterThenLogin(bot, bot.username);
+
+        // wait a bit for auth to settle, then start wander cycles
+        const postDelay = (cfg.authPlugin && cfg.authPlugin.postAuthDelayMs) || 1200;
         setTimeout(() => {
           startWanderCycle(bot);
-        }, (cfg.authPlugin && cfg.authPlugin.delayAfterSpawnMs) ? cfg.authPlugin.delayAfterSpawnMs + 800 : 2000);
+        }, postDelay + 800);
       } catch (e) {}
     });
 
@@ -161,9 +211,7 @@ function createBot() {
       tryReconnect();
     });
 
-    bot.on('error', () => {
-      // silent
-    });
+    bot.on('error', () => {});
 
     return bot;
   } catch (e) {
@@ -172,15 +220,5 @@ function createBot() {
   }
 }
 
-function tryReconnect() {
-  if (!cfg.reconnect || !cfg.reconnect.enabled) return;
-  if (typeof cfg.reconnect.maxAttempts === 'number' && reconnectAttempts >= cfg.reconnect.maxAttempts) return;
-  reconnectAttempts++;
-  const delay = cfg.reconnect.delayMs || 8000;
-  setTimeout(() => {
-    if (!botInstance) createBot();
-  }, delay);
-}
-
-// start
+// kick things off
 createBot();
