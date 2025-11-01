@@ -1,11 +1,17 @@
+// package.json
 {
-  "name": "mineflayer-bot",
+  "name": "silent-premium-bot",
   "version": "1.0.0",
+  "description": "Silent Mineflayer bot that joins and wanders (offline mode by default). Use only on servers you own/have permission to test.",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "mineflayer": "^4.5.0"
-  }
+    "mineflayer": "^4.0.0",
+    "mineflayer-pathfinder": "^1.0.5",
+    "minecraft-data": "^2.0.0",
+    "vec3": "^0.0.26"
+  },
+  "license": "MIT"
 }
