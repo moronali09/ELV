@@ -7,8 +7,8 @@ let bot;
 
 function createBot() {
     bot = mineflayer.createBot({
-        host: 'localhost', // আপনার সার্ভার আইপি দিন
-        port: 25565, // আপনার সার্ভার পোর্ট দিন
+        host: 'sparrowcraft.aternos.me', // আপনার সার্ভার আইপি দিন
+        port: 25519, // আপনার সার্ভার পোর্ট দিন
         username: 'cleanerbot', // বটের ইউজারনেম
         // password: 'password', // যদি প্রয়োজন হয়
         auth: 'offline' // offline/online/mojang
