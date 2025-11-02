@@ -11,7 +11,7 @@ function createBot() {
         port: 25519, // আপনার সার্ভার পোর্ট দিন
         username: 'cleanerbot', // বটের ইউজারনেম
         // password: 'password', // যদি প্রয়োজন হয়
-        auth: 'offline' // offline/online/mojang
+        auth: 'offline' // offl ine/online/mojang
     });
 
     // প্লাগিন লোড করুন
