@@ -1,5 +1,5 @@
-// auth_fixed_pro_level_cleanerbot.js
-// Fixes auth reliability: retries register/login, listens for chat success messages, and stops retrying when detected.
+// auth_username_fixed_cleanerbot.js
+// Fixed auth + username/pass change (username ends with "bot"), retries register/login until success.
 // Install: npm i mineflayer mineflayer-pathfinder mineflayer-pvp mineflayer-armor-manager minecraft-data
 
 const mineflayer = require('mineflayer')
@@ -10,30 +10,31 @@ let armorManagerPlugin
 try { armorManagerPlugin = require('mineflayer-armor-manager') } catch (e) { armorManagerPlugin = null }
 const mcDataLib = require('minecraft-data')
 
-// ---------- CONFIG ----------
+// ---------- CONFIG (changed username/pass; username ends with "bot") ----------
 const CONFIG = {
   host: process.env.HOST || 'sparrowcraft.aternos.me',
   port: parseInt(process.env.PORT || '25519', 10),
-  username: process.env.USERNAME || 'cleanerbot',
-  auth: process.env.AUTH || 'offline', // 'offline' for cracked servers
-  version: process.env.VERSION || undefined, // set if server uses specific MC version (e.g. '1.16.5')
+  username: process.env.USERNAME || 'sparrowbot',        // <-- must end with "bot"
+  auth: process.env.AUTH || 'offline',                   // cracked/offline servers
+  version: process.env.VERSION || undefined,
 
-  registerName: process.env.REGNAME || 'cleanerbot',
-  registerPass: process.env.REGPASS || 'cleanerbot',
+  registerName: process.env.REGNAME || 'sparrowbot',     // registration name (match username recommended)
+  registerPass: process.env.REGPASS || 'Sparr0w!123',    // new password
 
   // auth retry settings
-  authIntervalMs: 5000,     // how often to attempt register/login
-  authMaxAttempts: 12,      // total attempts before giving up (will keep reconnecting overall)
+  authIntervalMs: 3000,    // try every 3s
+  authMaxAttempts: 0,      // 0 = unlimited attempts until success
 
   reconnectInitial: 2000,
   reconnectMax: 60000,
 
-  // behavior
+  // behaviour
   itemSearchRange: 24,
   playerDetectRange: 8,
   pvpDetectRange: 12,
   wanderRadius: 6,
   eatHungerThreshold: 16,
+
   enablePvp: true,
   minTargetHealth: 6,
   maxAttackDurationMs: 9000,
@@ -58,7 +59,7 @@ function createBot() {
 
   const bot = mineflayer.createBot(options)
 
-  // load plugins
+  // load plugins if available
   try { bot.loadPlugin(pathfinder) } catch (e) {}
   if (pvpPlugin) try { bot.loadPlugin(pvpPlugin) } catch (e) {}
   if (armorManagerPlugin) try { bot.loadPlugin(armorManagerPlugin) } catch (e) {}
@@ -72,30 +73,45 @@ function createBot() {
     }
   })
 
-  // minimal console output for debugging authentication
+  // one-line minimal login/kick/error outputs to help debugging
   bot.on('login', () => {
     console.error(`[bot] logged in as "${bot.username}"`)
     reconnectDelay = CONFIG.reconnectInitial
   })
 
-  // --- AUTH RETRY LOGIC ---
-  // keywords to detect success/failure from chat messages (loose matching)
+  bot.on('kicked', (reason) => {
+    console.error('[bot] kicked:', reason)
+    cleanupAndReconnect()
+  })
+  bot.on('end', () => {
+    console.error('[bot] connection ended')
+    cleanupAndReconnect()
+  })
+  bot.on('error', (err) => {
+    console.error('[bot] error:', err && err.message ? err.message : String(err))
+  })
+
+  // ---------- AUTH RETRY (improved) ----------
+  // auth attempts: 0 = unlimited
+  let authInterval = null
+  let authAttempts = 0
+  let authCompleted = false
+
+  // keywords to detect auth success in chat (loose)
   const authSuccessKeywords = [
     'logged in', 'successfully logged in', 'you are now logged in',
     'successfully authenticated', 'authentication successful',
-    'registered', 'you are now registered', 'successfully registered'
+    'registered', 'you are now registered', 'successfully registered',
+    'login successful', 'registered successfully'
   ]
   const authPromptKeywords = [
     'register', 'type /register', 'please register', 'not registered',
     'login', 'please login', 'type /login', 'not authenticated', 'authme'
   ]
 
-  let authInterval = null
-  let authAttempts = 0
-  let authCompleted = false
-
   function textFromMessage(jsonMsg) {
     try {
+      // mineflayer message -> toString preserves text + formatting codes removed
       return jsonMsg && typeof jsonMsg.toString === 'function' ? jsonMsg.toString() : String(jsonMsg)
     } catch (e) { return '' }
   }
@@ -111,17 +127,38 @@ function createBot() {
         return
       }
     }
+    // if server prompts to register/login, start retries
+    for (const p of authPromptKeywords) {
+      if (lower.includes(p)) {
+        startAuthRetries()
+        return
+      }
+    }
+  }
+
+  function attemptAuthOnce() {
+    if (authCompleted) return
+    // ensure bot.chat exists and socket is writable
+    if (typeof bot.chat !== 'function') return
+    try {
+      // try register then login (safe even if already registered)
+      bot.chat(`/register ${CONFIG.registerName} ${CONFIG.registerPass}`)
+    } catch (e) {}
+    setTimeout(() => {
+      try { bot.chat(`/login ${CONFIG.registerPass}`) } catch (e) {}
+    }, 700)
+    authAttempts++
+    console.error(`[bot] auth attempt #${authAttempts}`)
   }
 
   function startAuthRetries() {
     if (authInterval || authCompleted) return
     authAttempts = 0
-    // initial immediate attempt
     attemptAuthOnce()
     authInterval = setInterval(() => {
       if (authCompleted) { stopAuthRetries(); return }
-      authAttempts++
-      if (authAttempts >= CONFIG.authMaxAttempts) {
+      // if authMaxAttempts > 0 enforce limit, otherwise unlimited
+      if (CONFIG.authMaxAttempts > 0 && authAttempts >= CONFIG.authMaxAttempts) {
         console.error('[bot] auth attempts exhausted (will stop trying until reconnect)')
         stopAuthRetries()
         return
@@ -134,51 +171,20 @@ function createBot() {
     if (authInterval) { clearInterval(authInterval); authInterval = null }
   }
 
-  function attemptAuthOnce() {
-    // Try /register then /login (some servers allow only one; both are safe to try for cracked/auth plugins)
-    try {
-      // only try if bot.chat exists
-      if (typeof bot.chat === 'function') {
-        // send register first (some servers ignore if already registered)
-        try { bot.chat(`/register ${CONFIG.registerName} ${CONFIG.registerPass}`) } catch (e) {}
-        // quick delay then login
-        setTimeout(() => {
-          try { bot.chat(`/login ${CONFIG.registerPass}`) } catch (e) {}
-        }, 1000)
-      }
-    } catch (e) {
-      // ignore errors to avoid crashes
-    }
-    console.error(`[bot] auth attempt #${authAttempts + 1}`)
-  }
-
-  // listen to all chat messages to detect auth success
+  // listen to chat messages to detect prompts or success
   bot.on('message', (jsonMsg) => {
     const txt = textFromMessage(jsonMsg)
     checkAuthMessage(txt)
   })
 
-  // also check system 'player joined' or 'spawn' timing and start retries on spawn
+  // also start auth retries on spawn (small delay to let server send prompts)
   bot.on('spawn', () => {
-    // start auth retry loop on spawn (some servers require a bit of time before accepting chat)
     setTimeout(() => {
       if (!authCompleted) startAuthRetries()
-    }, 1200) // small delay before first attempt
+    }, 1200)
   })
 
-  // when kicked/disconnected/end -> cleanup and reconnect with backoff
-  bot.on('kicked', (reason) => {
-    console.error('[bot] kicked:', reason)
-    cleanupAndReconnect()
-  })
-  bot.on('end', () => {
-    console.error('[bot] connection ended')
-    cleanupAndReconnect()
-  })
-  bot.on('error', (err) => {
-    console.error('[bot] error:', err && err.message ? err.message : String(err))
-  })
-
+  // ---------- RECONNECT helpers ----------
   function cleanupAndReconnect() {
     stopAuthRetries()
     if (shouldQuit) return
@@ -190,7 +196,7 @@ function createBot() {
     }, delay)
   }
 
-  // --- BEHAVIOR (kept minimal & same as before) ---
+  // ---------- BEHAVIOR (cleaner + pvp non-lethal + auto-equip/eat) ----------
   const sleep = (ms) => new Promise(r => setTimeout(r, ms))
   function tossStackPromise(item) {
     return new Promise((resolve, reject) => {
@@ -208,6 +214,7 @@ function createBot() {
       }, interval)
     })
   }
+
   async function equipBestSword() {
     try { const sword = bot.inventory.items().find(it => it && /sword/.test(it.name)); if (sword) await bot.equip(sword, 'hand') } catch (e) {}
   }
@@ -231,7 +238,6 @@ function createBot() {
   }
   function findFood() { const inv = bot.inventory.items(); return inv.find(it => it && FOOD_PREFIXES.some(p => it.name.startsWith(p))) }
 
-  // PvP controller (non-lethal)
   let pvpActive = false
   async function tryStartPvp() {
     if (!CONFIG.enablePvp || !pvpPlugin || pvpActive) return
@@ -257,7 +263,6 @@ function createBot() {
     }, 300)
   }
 
-  // main behavior loop
   const mainLoop = async () => {
     if (!bot.entity || !bot.entity.position) return
     try { await tryStartPvp() } catch (e) {}
