@@ -1,4 +1,4 @@
-// Save as cleanerbot_pvp.js
+// Save as cleanerbot_pvp_offline.js
 // Requires: npm i mineflayer mineflayer-pathfinder mineflayer-pvp minecraft-data
 const mineflayer = require('mineflayer')
 const { pathfinder, Movements, goals: { GoalNear } } = require('mineflayer-pathfinder')
@@ -6,15 +6,15 @@ const pvpPlugin = require('mineflayer-pvp').plugin
 const mcDataLib = require('minecraft-data')
 
 /**
- * CONFIG - change these to match your server/account
+ * CONFIG - change these if needed or pass via environment variables
  */
 const CONFIG = {
-  host: 'sparrowcraft.aternos.me',
-  port: 25519,
-  username: '_cleanerBot',
-  auth: 'mojang',
-  registerName: 'cleanerbot',
-  registerPass: 'cleanerbot',
+  host: process.env.HOST || 'sparrowcraft.aternos.me',
+  port: parseInt(process.env.PORT || '25519', 10),
+  username: process.env.USERNAME || 'cleanerbot',
+  auth: process.env.AUTH || 'offline',   // <-- use 'offline' for cracked accounts
+  registerName: process.env.REGNAME || 'cleanerbot',
+  registerPass: process.env.REGPASS || 'cleanerbot',
   reconnectDelay: 3000,
   itemSearchRange: 20,
   playerDetectRange: 8,
@@ -22,11 +22,11 @@ const CONFIG = {
   wanderRadius: 6,
 
   // PvP settings
-  enablePvp: true,               // set false to disable PvP
-  pvpDetectRange: 12,           // how far to search for a PvP target
-  minTargetHealth: 6,           // stop attacking if target health <= this (prevents kills)
-  maxAttackDurationMs: 8000,    // max time to attack a single target (prevents lethal fights)
-  attackReach: 3                // desired distance to target while attacking
+  enablePvp: true,
+  pvpDetectRange: 12,
+  minTargetHealth: 6,
+  maxAttackDurationMs: 8000,
+  attackReach: 3
 }
 
 let shouldQuit = false
@@ -40,33 +40,34 @@ function createBot() {
     auth: CONFIG.auth
   })
 
-  // plugins
   bot.loadPlugin(pathfinder)
   bot.loadPlugin(pvpPlugin)
 
   let mcData
   bot.once('inject_allowed', () => {
-    mcData = mcDataLib(bot.version)
+    try { mcData = mcDataLib(bot.version) } catch (e) { mcData = null }
   })
 
-  // silent: we will not log to console or chat except register/login commands
   bot.on('spawn', () => {
+    // If the server uses an auth plugin (like AuthMe), register/login via chat commands.
+    // Keep silent otherwise.
     try { bot.chat(`/register ${CONFIG.registerName} ${CONFIG.registerPass}`) } catch (e) {}
-    setTimeout(() => { try { bot.chat(`/login ${CONFIG.registerPass}`) } catch (e) {} }, 1000)
+    setTimeout(() => {
+      try { bot.chat(`/login ${CONFIG.registerPass}`) } catch (e) {}
+    }, 1000)
 
-    const movements = new Movements(bot, mcData)
-    bot.pathfinder.setMovements(movements)
+    if (mcData) {
+      const movements = new Movements(bot, mcData)
+      bot.pathfinder.setMovements(movements)
+    }
   })
 
-  // reconnect handlers (silent)
-  bot.on('end', () => setTimeout(createBot, CONFIG.reconnectDelay))
-  bot.on('kicked', () => setTimeout(createBot, CONFIG.reconnectDelay))
-  bot.on('error', () => {}) // suppress errors
+  bot.on('end', () => setTimeout(() => createBot(), CONFIG.reconnectDelay))
+  bot.on('kicked', () => setTimeout(() => createBot(), CONFIG.reconnectDelay))
+  bot.on('error', () => {}) // silent
 
-  // helper sleeps
   const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-  // equip helpers
   async function equipBestSword() {
     try {
       const sword = bot.inventory.items().find(it => it && /sword/.test(it.name))
@@ -94,12 +95,11 @@ function createBot() {
     } catch (e) {}
   }
 
-  // PvP controller: find target, equip, attack non-lethally
   let pvpActive = false
   async function tryStartPvp() {
-    if (!CONFIG.enablePvp) return
-    if (pvpActive) return
-    // find nearest player (exclude self)
+    if (!CONFIG.enablePvp || pvpActive) return
+    if (!bot.entity || !bot.entity.position) return
+
     const target = bot.nearestEntity(e =>
       e && e.type === 'player' && e.username && e.username !== bot.username &&
       e.position && e.position.distanceTo(bot.entity.position) <= CONFIG.pvpDetectRange
@@ -107,26 +107,19 @@ function createBot() {
     if (!target) return
 
     pvpActive = true
-    try {
-      await equipArmorSet()
-      await equipBestSword()
-    } catch (e) {}
+    try { await equipArmorSet(); await equipBestSword() } catch (e) {}
 
-    // start attack
-    try {
-      bot.pvp.attack(target, true)
-    } catch (e) {}
+    try { bot.pvp.attack(target, true) } catch (e) {}
 
     const startTime = Date.now()
     const monitor = setInterval(() => {
       try {
-        // stop conditions: target gone, exceeded time, target health low, or bot died
-        const targetEntity = bot.entities[target.id]
-        const targetHealth = targetEntity && typeof targetEntity.health === 'number' ? targetEntity.health : undefined
+        const ent = bot.entities[target.id]
+        const targetHealth = ent && typeof ent.health === 'number' ? ent.health : undefined
         const elapsed = Date.now() - startTime
         const tooLong = elapsed > CONFIG.maxAttackDurationMs
         const lowHealth = typeof targetHealth === 'number' && targetHealth <= CONFIG.minTargetHealth
-        const targetMissing = !targetEntity
+        const targetMissing = !ent
         const botDead = (typeof bot.health === 'number' && bot.health <= 0)
 
         if (targetMissing || tooLong || lowHealth || botDead) {
@@ -134,7 +127,6 @@ function createBot() {
           clearInterval(monitor)
           pvpActive = false
         } else {
-          // adjust goal to stay near target
           try {
             bot.pathfinder.setGoal(new GoalNear(target.position.x, target.position.y, target.position.z, CONFIG.attackReach))
           } catch (e) {}
@@ -147,17 +139,15 @@ function createBot() {
     }, 300)
   }
 
-  // core behaviour loop (collect items, follow players to drop items, eat, wander) preserving previous logic
+  const FOOD_REGEX = /^(apple|bread|cooked|baked|pumpkin_pie|mushroom_stew|rabbit_stew|cookie|golden_apple|golden_carrot|beetroot)/
+
   const mainLoop = async () => {
     if (!bot.entity || !bot.entity.position) return
 
-    // PvP attempt (if enabled)
     try { await tryStartPvp() } catch (e) {}
 
-    // If a nearby player (friendly) detected, go and drop items to them (same as before)
     const player = bot.nearestEntity(e =>
-      e && e.type === 'player' &&
-      e.username && e.username !== bot.username &&
+      e && e.type === 'player' && e.username && e.username !== bot.username &&
       e.position && e.position.distanceTo(bot.entity.position) <= CONFIG.playerDetectRange
     )
 
@@ -169,7 +159,6 @@ function createBot() {
           return ent && bot.entity && ent.position && bot.entity.position.distanceTo(ent.position) <= 2
         }, 7000)
       } catch (e) {}
-
       try {
         const items = bot.inventory.items()
         for (const item of items) {
@@ -177,14 +166,12 @@ function createBot() {
           await sleep(250)
         }
       } catch (e) {}
-
       return
     }
 
-    // Eat when hungry
     try {
       if (typeof bot.food === 'number' && bot.food < CONFIG.eatHungerThreshold && !bot.foodEating) {
-        const foodItem = bot.inventory.items().find(it => it && /^(apple|bread|cooked|baked|pumpkin_pie|mushroom_stew|rabbit_stew|cookie|golden_apple|golden_carrot|beetroot)/.test(it.name))
+        const foodItem = bot.inventory.items().find(it => it && FOOD_REGEX.test(it.name))
         if (foodItem) {
           try {
             await bot.equip(foodItem, 'hand')
@@ -196,7 +183,6 @@ function createBot() {
       }
     } catch (e) {}
 
-    // collect nearest dropped item
     const itemEntity = bot.nearestEntity(e => e && e.name === 'item' && e.position && e.position.distanceTo(bot.entity.position) <= CONFIG.itemSearchRange)
     if (itemEntity) {
       try {
@@ -205,7 +191,6 @@ function createBot() {
       } catch (e) {}
     }
 
-    // wander
     try {
       const rx = bot.entity.position.x + (Math.random() * 2 - 1) * CONFIG.wanderRadius
       const rz = bot.entity.position.z + (Math.random() * 2 - 1) * CONFIG.wanderRadius
@@ -214,12 +199,10 @@ function createBot() {
     } catch (e) {}
   }
 
-  // loop runner
   const loopInterval = setInterval(() => {
     if (bot && bot.entity) mainLoop().catch(()=>{})
   }, 800)
 
-  // utilities
   function tossStackPromise(bot, item) {
     return new Promise((resolve, reject) => {
       try {
