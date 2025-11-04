@@ -1,5 +1,6 @@
-// auth_username_fixed_cleanerbot.js
+// auth_username_fixed_cleanerbot.fixed.js
 // Fixed auth + username/pass change (username ends with "bot"), retries register/login until success.
+// Tries multiple register variants, reports status into server chat (so it appears in server console).
 // Install: npm i mineflayer mineflayer-pathfinder mineflayer-pvp mineflayer-armor-manager minecraft-data
 
 const mineflayer = require('mineflayer')
@@ -80,7 +81,8 @@ function createBot() {
   })
 
   bot.on('kicked', (reason) => {
-    console.error('[bot] kicked:', reason)
+    const r = (reason && typeof reason.toString === 'function') ? reason.toString() : String(reason)
+    console.error('[bot] kicked:', r)
     cleanupAndReconnect()
   })
   bot.on('end', () => {
@@ -101,17 +103,16 @@ function createBot() {
   const authSuccessKeywords = [
     'logged in', 'successfully logged in', 'you are now logged in',
     'successfully authenticated', 'authentication successful',
-    'registered', 'you are now registered', 'successfully registered',
-    'login successful', 'registered successfully'
+    'registered', 'you are now registered', 'registered successfully',
+    'login successful', 'welcome', 'you are already logged in', 'already logged in'
   ]
   const authPromptKeywords = [
     'register', 'type /register', 'please register', 'not registered',
-    'login', 'please login', 'type /login', 'not authenticated', 'authme'
+    'login', 'please login', 'type /login', 'not authenticated', 'authme', 'you must register'
   ]
 
   function textFromMessage(jsonMsg) {
     try {
-      // mineflayer message -> toString preserves text + formatting codes removed
       return jsonMsg && typeof jsonMsg.toString === 'function' ? jsonMsg.toString() : String(jsonMsg)
     } catch (e) { return '' }
   }
@@ -119,11 +120,17 @@ function createBot() {
   function checkAuthMessage(text) {
     if (!text) return
     const lower = text.toLowerCase()
+    // log incoming chat locally so user sees server messages in bot console
+    console.error('[chat]', text.replace(/\r?\n/g, ' '))
     for (const k of authSuccessKeywords) {
       if (lower.includes(k)) {
-        authCompleted = true
-        stopAuthRetries()
-        console.error('[bot] auth success detected -> stopping auth retries')
+        if (!authCompleted) {
+          authCompleted = true
+          stopAuthRetries()
+          console.error('[bot] auth success detected -> stopping auth retries')
+          // announce to server chat (if allowed)
+          try { if (typeof bot.chat === 'function') bot.chat(`[${bot.username}] auth success`) } catch (e) {}
+        }
         return
       }
     }
@@ -138,15 +145,33 @@ function createBot() {
 
   function attemptAuthOnce() {
     if (authCompleted) return
-    // ensure bot.chat exists and socket is writable
     if (typeof bot.chat !== 'function') return
+    // Avoid flooding server chat: only announce every N attempts (e.g., every 4 attempts)
+    const announceEvery = 4
+    if (authAttempts % announceEvery === 0) {
+      try { bot.chat(`/msg ${CONFIG.registerName} attempting auth (attempt ${authAttempts + 1})`) } catch (e) {
+        try { bot.chat(`Auth attempt ${authAttempts + 1}`) } catch (e2) {}
+      }
+    }
+
+    // Try multiple common register variants followed by login.
+    // Many servers use: /register <password> <password>
+    // Others sometimes use: /register <name> <password>
+    // We'll try several in sequence with small delays.
     try {
-      // try register then login (safe even if already registered)
-      bot.chat(`/register ${CONFIG.registerName} ${CONFIG.registerPass}`)
+      bot.chat(`/register ${CONFIG.registerPass} ${CONFIG.registerPass}`)
     } catch (e) {}
     setTimeout(() => {
+      try { bot.chat(`/register ${CONFIG.registerName} ${CONFIG.registerPass}`) } catch (e) {}
+    }, 400)
+    setTimeout(() => {
+      try { bot.chat(`/register ${CONFIG.registerPass}`) } catch (e) {}
+    }, 800)
+    // always try login shortly after register attempts
+    setTimeout(() => {
       try { bot.chat(`/login ${CONFIG.registerPass}`) } catch (e) {}
-    }, 700)
+    }, 1200)
+
     authAttempts++
     console.error(`[bot] auth attempt #${authAttempts}`)
   }
@@ -157,7 +182,6 @@ function createBot() {
     attemptAuthOnce()
     authInterval = setInterval(() => {
       if (authCompleted) { stopAuthRetries(); return }
-      // if authMaxAttempts > 0 enforce limit, otherwise unlimited
       if (CONFIG.authMaxAttempts > 0 && authAttempts >= CONFIG.authMaxAttempts) {
         console.error('[bot] auth attempts exhausted (will stop trying until reconnect)')
         stopAuthRetries()
@@ -293,4 +317,6 @@ function createBot() {
 
 // start
 createBot()
-process.on('SIGINT', () => { shouldQuit = true; process.exit() })
+process.on('SIGINT', () => { shouldQuit = true;
+  process.exit()
+})
